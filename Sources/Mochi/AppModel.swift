@@ -34,19 +34,27 @@ final class AppModel {
         self.nudger = nudger
         eventHandlers.append { nudger.handle($0) }
 
+        let companion = Companion(engine: engine, settings: settings,
+                                  intervalOverride: env["MOCHI_CHAT_SECONDS"].flatMap(Double.init))
+        self.companion = companion
+        eventHandlers.append { companion.handle($0) }
+        companion.start()
+
         let idle = env["MOCHI_IDLE_SECONDS"].flatMap(Double.init) ?? 300
         let monitor = SystemMonitor(engine: engine, threshold: idle)
+        monitor.onReturn = { companion.userReturned() }
         monitor.start()
         self.monitor = monitor
 
         panel = FloatingPanelController(
-            rootView: MascotHost(engine: engine, settings: settings),
+            rootView: MascotHost(engine: engine, settings: settings, companion: companion),
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium
         )
         trackMascotVisibility()
         trackMascotSize()
     }
 
+    private var companion: Companion?
     private var nudger: Nudger?
     private var monitor: SystemMonitor?
     private var panel: FloatingPanelController?

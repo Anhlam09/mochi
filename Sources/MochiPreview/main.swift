@@ -85,6 +85,17 @@ try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories
             render(extras, name: "hover_celebrate_\(mode)", dark: dark)
         }
 
+        // Talking sheet: friendly chatter lines (the longest ones) at each size.
+        do {
+            let talk = HStack(alignment: .bottom, spacing: 0) {
+                MascotScene(pose: .idle, progress: 0, bubbleText: "Good morning, Anh! ☀️ How are you feeling today?", t: 0.4)
+                MascotScene(pose: .working, progress: 0.4, bubbleText: "Your hard work is adding up, even when it's quiet 🌱", t: 0.4)
+                MascotScene(pose: .working, progress: 0.4, bubbleText: "Boop! You're doing great 💕", t: 0.4, size: .small)
+                MascotScene(pose: .working, progress: 0.4, bubbleText: "How was your day, Christopher? I hope it was kind to you 🌙", t: 0.4, size: .large)
+            }
+            render(talk, name: "talking_\(mode)", dark: dark)
+        }
+
         // Scenes sheet: full compositions for every pose.
         let scenes = HStack(spacing: 0) {
             ForEach(MascotPose.allCases, id: \.self) { pose in

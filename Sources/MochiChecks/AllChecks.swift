@@ -6,4 +6,5 @@ import MochiCore
         expect(MochiCore.bundleID == "com.anh.mochi")
     }
     runEngineChecks()
+    runChatterChecks()
 }

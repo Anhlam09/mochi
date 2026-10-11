@@ -7,16 +7,17 @@ import MochiUI
 struct MascotHost: View {
     let engine: TimerEngine
     let settings: MochiSettings
+    let companion: Companion
 
     var body: some View {
         MascotView(
             pose: Self.pose(for: engine),
             progress: engine.progress,
-            bubbleText: Self.bubble(for: engine),
+            bubbleText: Self.bubble(for: engine) ?? companion.message,
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium,
             hoverText: Self.hoverText(for: engine),
             calm: settings.calmMode,
-            onTap: { Self.handleTap(engine) }
+            onTap: { Self.handleTap(engine, companion: companion) }
         )
     }
 
@@ -62,8 +63,8 @@ struct MascotHost: View {
     }
 
     /// Tapping Mochi does the obvious thing for the moment: start a due break,
-    /// or wake up from a pause.
-    static func handleTap(_ engine: TimerEngine) {
+    /// or wake up from a pause. Otherwise Mochi just says something sweet.
+    static func handleTap(_ engine: TimerEngine, companion: Companion) {
         switch engine.phase {
         case .breakDue, .snoozed:
             engine.startBreak()
@@ -71,8 +72,9 @@ struct MascotHost: View {
             engine.resume()
         case .idle:
             engine.start()
+            companion.say(.focusStart)
         case .focusing, .onBreak:
-            break
+            companion.say(.tapped)
         }
     }
 }

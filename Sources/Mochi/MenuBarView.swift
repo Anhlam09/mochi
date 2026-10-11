@@ -98,6 +98,24 @@ struct MenuBarView: View {
                     .font(.system(.callout, design: .rounded))
                 }
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Mochi talks to you").font(.system(.callout, design: .rounded))
+                    Picker("Mochi talks to you", selection: $settings.chatLevel) {
+                        ForEach(ChatLevel.allCases, id: \.rawValue) { level in
+                            Text(level.displayName).tag(level.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    if settings.chat != .off {
+                        TextField("Your name", text: $settings.friendName, prompt: Text("What should Mochi call you?"))
+                            .textFieldStyle(.roundedBorder)
+                            .controlSize(.small)
+                            .font(.system(.callout, design: .rounded))
+                    }
+                }
+
                 Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
                     .toggleStyle(.switch)
                     .controlSize(.small)

@@ -20,7 +20,12 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
   - An optional soft chime.
   - Snooze is limited to 2 per break.
 - **Mochi's moods:** working, almost done (yawning), break time (bouncing and waving), on break (sleeping Zzz) and paused (droopy sprout).
-- **Click Mochi** to start the timer, start a due break, or resume from pause.
+- **Mochi talks to you.** It's a little friend that says sweet, kind things in its speech bubble:
+  - A hello once a day that fits the time ("Good morning, Anh! ☀️ How are you feeling today?"), with extra cheer on Mondays and Fridays.
+  - Check-ins now and then ("How's your day going? 🌤️", "Have you had some water yet? 💧"), gentle affirmations, and cute fun facts ("Did you know? Otters hold hands while they sleep 🦦"). It has weekend and seasonal lines, and late at night it nudges you toward bed 🌙.
+  - A welcome back after you step away, a thank-you after a break, and a sweet reply when you tap it.
+  - Choose how often it talks (Off / Sometimes / Often) and what it calls you in Settings. It stays quiet during breaks and just before one is due.
+- **Click Mochi** to start the timer, start a due break, or resume from pause. Any other time, it says something nice.
 - **Stepping away counts.** Being idle, locked or asleep for 5 minutes or more counts as a break you took, and Mochi starts a fresh focus when you're back.
 - Open at login, start automatically, show or hide Mochi, sound on or off.
 - **Calm mode** (on by default): motion runs in Core Animation, so Mochi uses about 1% CPU while visible, against about 7% in full mode.
@@ -54,15 +59,15 @@ swift run MochiPreview ./previews
 Use short timers to watch a whole cycle in seconds:
 
 ```bash
-MOCHI_FOCUS_SECONDS=8 MOCHI_BREAK_SECONDS=6 MOCHI_IDLE_SECONDS=20 ~/Applications/Mochi.app/Contents/MacOS/Mochi
+MOCHI_FOCUS_SECONDS=8 MOCHI_BREAK_SECONDS=6 MOCHI_IDLE_SECONDS=20 MOCHI_CHAT_SECONDS=30 ~/Applications/Mochi.app/Contents/MacOS/Mochi
 ```
 
 ## Project layout
 | Target | What's in it |
 |---|---|
-| `MochiCore` | Pure logic: `TimerEngine` state machine (based on end dates, so it survives sleep), `Preset`, `Tips`, `MochiSettings`, `AwayPolicy` |
+| `MochiCore` | Pure logic: `TimerEngine` state machine (based on end dates, so it survives sleep), `Preset`, `Tips`, `MochiSettings`, `AwayPolicy`, `Chatter` (Mochi's lines and when to say them) |
 | `MochiUI` | Mascot drawn entirely with SwiftUI shapes (no image assets), poses, progress ring, speech bubble, `FloatingPanelController` |
-| `Mochi` | The app: `AppModel` (single owner), menu bar view, `MascotHost` (engine → pose), `Nudger` (notifications and sound), `SystemMonitor`, `LaunchAtLogin` |
+| `Mochi` | The app: `AppModel` (single owner), menu bar view, `MascotHost` (engine → pose), `Companion` (Mochi's chatter), `Nudger` (notifications and sound), `SystemMonitor`, `LaunchAtLogin` |
 | `MochiChecks` | Logic checks (`swift run MochiChecks`) |
 | `MochiPreview` | Renders poses and sizes to PNG for design review |
 

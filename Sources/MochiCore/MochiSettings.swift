@@ -15,6 +15,10 @@ public final class MochiSettings {
     public var mascotSize: String { didSet { defaults.set(mascotSize, forKey: "mascotSize") } }
     /// Gentler, low-CPU animation for the floating mascot.
     public var calmMode: Bool { didSet { defaults.set(calmMode, forKey: "calmMode") } }
+    /// How often Mochi says kind things unprompted (raw value of `ChatLevel`).
+    public var chatLevel: String { didSet { defaults.set(chatLevel, forKey: "chatLevel") } }
+    /// What Mochi calls the user; empty means no name.
+    public var friendName: String { didSet { defaults.set(friendName, forKey: "friendName") } }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -27,7 +31,13 @@ public final class MochiSettings {
         autoStart = defaults.object(forKey: "autoStart") as? Bool ?? false
         mascotSize = defaults.string(forKey: "mascotSize") ?? "medium"
         calmMode = defaults.object(forKey: "calmMode") as? Bool ?? true
+        chatLevel = defaults.string(forKey: "chatLevel").flatMap(ChatLevel.init(rawValue:))?.rawValue
+            ?? ChatLevel.sometimes.rawValue
+        friendName = defaults.string(forKey: "friendName")
+            ?? NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
     }
+
+    public var chat: ChatLevel { ChatLevel(rawValue: chatLevel) ?? .sometimes }
 
     public var preset: Preset {
         if presetID == "custom" { return .custom(focusMinutes: customFocusMinutes, breakMinutes: customBreakMinutes) }
