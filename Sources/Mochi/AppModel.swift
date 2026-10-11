@@ -34,6 +34,12 @@ final class AppModel {
         self.nudger = nudger
         eventHandlers.append { nudger.handle($0) }
 
+        settings.launchAtLogin = LaunchAtLogin.isEnabled
+        let idle = env["MOCHI_IDLE_SECONDS"].flatMap(Double.init) ?? 300
+        let monitor = SystemMonitor(engine: engine, threshold: idle)
+        monitor.start()
+        self.monitor = monitor
+
         panel = FloatingPanelController(
             rootView: MascotHost(engine: engine, settings: settings),
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium
@@ -43,6 +49,7 @@ final class AppModel {
     }
 
     private var nudger: Nudger?
+    private var monitor: SystemMonitor?
     private var panel: FloatingPanelController?
 
     /// Resizes the floating panel to match `settings.mascotSize`.

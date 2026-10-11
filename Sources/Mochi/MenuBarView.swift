@@ -1,6 +1,7 @@
 import SwiftUI
 import MochiCore
 import MochiUI
+import ServiceManagement
 
 private let lavender = Color(red: 0xB5/255, green: 0xA8/255, blue: 0xFF/255)
 private let sky = Color(red: 0x8F/255, green: 0xD9/255, blue: 0xF0/255)
@@ -9,6 +10,13 @@ private let blush = Color(red: 0xFF/255, green: 0xB3/255, blue: 0xC1/255)
 struct MenuBarView: View {
     let engine: TimerEngine
     let settings: MochiSettings
+    @State private var loginStatus = LaunchAtLogin.status
+
+    private func setLaunchAtLogin(_ on: Bool) {
+        do { try LaunchAtLogin.set(on) } catch {}
+        loginStatus = LaunchAtLogin.status
+        settings.launchAtLogin = LaunchAtLogin.isEnabled
+    }
 
     private var caption: String {
         switch engine.phase {
@@ -65,31 +73,51 @@ struct MenuBarView: View {
                 .font(.system(.callout, design: .rounded))
             }
 
-            Toggle("Show Mochi on screen", isOn: $settings.showMascot)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .font(.system(.callout, design: .rounded))
+            DisclosureGroup("Settings ⚙︎") {
+              VStack(alignment: .leading, spacing: 8) {
+                Toggle("Show Mochi on screen", isOn: $settings.showMascot)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(.system(.callout, design: .rounded))
 
-            if settings.showMascot {
-                Picker("Size", selection: $settings.mascotSize) {
-                    ForEach(MascotSize.allCases, id: \.rawValue) { size in
-                        Text(size.displayName).tag(size.rawValue)
+                if settings.showMascot {
+                    Picker("Size", selection: $settings.mascotSize) {
+                        ForEach(MascotSize.allCases, id: \.rawValue) { size in
+                            Text(size.displayName).tag(size.rawValue)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .font(.system(.callout, design: .rounded))
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.small)
-                .font(.system(.callout, design: .rounded))
+
+                Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(.system(.callout, design: .rounded))
+
+                Toggle("Sound", isOn: $settings.soundEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(.system(.callout, design: .rounded))
+
+                Toggle("Open Mochi at login", isOn: Binding(
+                    get: { settings.launchAtLogin },
+                    set: { setLaunchAtLogin($0) }))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(.system(.callout, design: .rounded))
+                if loginStatus == .requiresApproval {
+                    Text("Approve in System Settings → Login Items")
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(.secondary)
+                    Button("Open Login Items") { LaunchAtLogin.openLoginItemsSettings() }
+                        .font(.system(.caption, design: .rounded))
+                }
+              }
+              .padding(.top, 6)
             }
-
-            Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .font(.system(.callout, design: .rounded))
-
-            Toggle("Sound", isOn: $settings.soundEnabled)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .font(.system(.callout, design: .rounded))
+            .font(.system(.callout, design: .rounded))
 
             Button("Quit Mochi") { NSApp.terminate(nil) }
                 .buttonStyle(.plain)
@@ -98,6 +126,7 @@ struct MenuBarView: View {
         }
         .padding(14)
         .frame(width: 260)
+        .onAppear { loginStatus = LaunchAtLogin.status }
         .font(.system(.body, design: .rounded))
     }
 

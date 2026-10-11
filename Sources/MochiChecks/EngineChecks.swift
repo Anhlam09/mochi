@@ -163,6 +163,7 @@ final class TestClock: @unchecked Sendable {
     runAdjustChecks()
     runStopChecks()
     runM4ReviewChecks()
+    runAwayChecks()
 }
 
 @MainActor private func runReviewChecks() {
@@ -371,5 +372,43 @@ final class TestClock: @unchecked Sendable {
         e.startBreak(); let t1 = e.phaseStartedAt
         c.advance(3); e.pause(); c.advance(3); e.resume()
         expect(e.phaseStartedAt == t1 && t1 != t0)
+    }
+}
+
+@MainActor private func runAwayChecks() {
+    check("AwayPolicy decisions") {
+        let t: TimeInterval = 300
+        let f = Phase.focusing(end: Date()), d = Phase.breakDue(since: Date(), snoozes: 0)
+        expect(AwayPolicy.action(awayFor: 299, phase: f, threshold: t) == .none)
+        expect(AwayPolicy.action(awayFor: 300, phase: f, threshold: t) == .naturalBreak)
+        expect(AwayPolicy.action(awayFor: 900, phase: d, threshold: t) == .naturalBreak)
+        expect(AwayPolicy.action(awayFor: 900, phase: .snoozed(end: Date(), snoozes: 1), threshold: t) == .naturalBreak)
+        expect(AwayPolicy.action(awayFor: 900, phase: .onBreak(end: Date()), threshold: t) == .none)
+        expect(AwayPolicy.action(awayFor: 900, phase: .idle, threshold: t) == .none)
+        expect(AwayPolicy.action(awayFor: 900, phase: .paused(remaining: 5, resume: .focusing), threshold: t) == .none)
+    }
+    check("IdleTracker fires once per stretch, re-arms on activity") {
+        var tr = IdleTracker()
+        let f = Phase.focusing(end: Date())
+        expect(tr.update(idleFor: 100, phase: f, threshold: 300) == .none)
+        expect(tr.update(idleFor: 310, phase: f, threshold: 300) == .naturalBreak)
+        expect(tr.update(idleFor: 330, phase: f, threshold: 300) == .none)
+        expect(tr.update(idleFor: 2, phase: f, threshold: 300) == .none)
+        expect(tr.update(idleFor: 305, phase: f, threshold: 300) == .naturalBreak)
+        // resting: consumed, no action
+        expect(tr.update(idleFor: 1, phase: f, threshold: 300) == .none)
+        expect(tr.update(idleFor: 400, phase: .onBreak(end: Date()), threshold: 300) == .none)
+        expect(tr.update(idleFor: 420, phase: f, threshold: 300) == .none)
+    }
+    check("AwayTracker lock/sleep/wake") {
+        var tr = AwayTracker()
+        let t0 = Date(timeIntervalSince1970: 0)
+        tr.lock(at: t0)
+        tr.sleep(at: t0.addingTimeInterval(10))
+        expect(tr.wake(at: t0.addingTimeInterval(500)) == nil, "wake while locked ignored")
+        expect(tr.unlock(at: t0.addingTimeInterval(600)) == 600)
+        expect(tr.unlock(at: t0.addingTimeInterval(700)) == nil)
+        tr.sleep(at: t0.addingTimeInterval(1000))
+        expect(tr.wake(at: t0.addingTimeInterval(1100)) == 100)
     }
 }
