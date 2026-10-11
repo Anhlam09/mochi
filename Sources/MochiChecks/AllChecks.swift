@@ -5,4 +5,5 @@ import MochiCore
     check("bundle ID is stable") {
         expect(MochiCore.bundleID == "com.anh.mochi")
     }
+    runEngineChecks()
 }
