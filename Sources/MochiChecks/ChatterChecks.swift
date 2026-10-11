@@ -76,17 +76,35 @@ import MochiCore
         expect(ChatSchedule.next(after: t, interval: 600, jitter: 7) == t.addingTimeInterval(750))
         expect(ChatLevel.off.interval == nil && ChatLevel.often.interval! < ChatLevel.sometimes.interval!)
     }
+    check("flavor announcements fit the bubble") {
+        var c = Chatter()
+        for i in 0..<4 {
+            let line = c.flavorLine(name: "Strawberry", emoji: "🍓", pick: { _ in i })
+            expect(line.contains("Strawberry") && line.count <= 64, line)
+        }
+    }
+    check("flavor settings persist; rotation on by default") {
+        let suite = "mochi.checks.flavor"
+        let d = UserDefaults(suiteName: suite)!
+        d.removePersistentDomain(forName: suite)
+        let s = MochiSettings(defaults: d)
+        expect(s.flavor == "strawberry" && s.flavorRotation)
+        s.flavor = "matcha"; s.flavorRotation = false
+        let t = MochiSettings(defaults: d)
+        expect(t.flavor == "matcha" && !t.flavorRotation)
+        d.removePersistentDomain(forName: suite)
+    }
     check("chat settings persist; bad values fall back") {
         let suite = "mochi.checks.chat"
         let d = UserDefaults(suiteName: suite)!
         d.removePersistentDomain(forName: suite)
         let s = MochiSettings(defaults: d)
-        expect(s.chat == .sometimes)
-        s.chatLevel = ChatLevel.often.rawValue; s.friendName = "Anh"
+        expect(s.chat == .often)
+        s.chatLevel = ChatLevel.sometimes.rawValue; s.friendName = "Anh"
         let t = MochiSettings(defaults: d)
-        expect(t.chat == .often && t.friendName == "Anh")
+        expect(t.chat == .sometimes && t.friendName == "Anh")
         d.set("chatterbox", forKey: "chatLevel")
-        expect(MochiSettings(defaults: d).chat == .sometimes)
+        expect(MochiSettings(defaults: d).chat == .often)
         d.removePersistentDomain(forName: suite)
     }
 }

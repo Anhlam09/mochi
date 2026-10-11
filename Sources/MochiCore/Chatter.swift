@@ -28,6 +28,8 @@ public enum ChatMoment: Sendable, Equatable, CaseIterable {
     case welcomeBack
     /// Unprompted cute little fact or musing.
     case funFact
+    /// The mouse wandered over Mochi.
+    case hello
     /// The user tapped Mochi while there was nothing else to do.
     case tapped
     /// A focus session just started from a tap.
@@ -50,8 +52,8 @@ public enum ChatLevel: String, CaseIterable, Sendable {
     public var interval: TimeInterval? {
         switch self {
         case .off: nil
-        case .sometimes: 30 * 60
-        case .often: 12 * 60
+        case .sometimes: 8 * 60
+        case .often: 2 * 60
         }
     }
 }
@@ -98,6 +100,18 @@ public struct Chatter: Sendable {
         return Self.fill(template, name: name)
     }
 
+    /// Mochi announcing its new colours, e.g. ("Matcha", "🍵").
+    public mutating func flavorLine(name flavor: String, emoji: String,
+                                    pick: (Int) -> Int = { Int.random(in: 0..<$0) }) -> String {
+        let lines = [
+            "Ta-da! ✨ I'm \(flavor) Mochi now! \(emoji)",
+            "Spin spin! Do you like my \(flavor) colors? \(emoji)",
+            "New look! \(flavor) Mochi reporting for duty \(emoji)",
+            "Whee! I turned into \(flavor) Mochi \(emoji)",
+        ]
+        return lines[min(max(0, pick(lines.count)), lines.count - 1)]
+    }
+
     /// Swaps in the name: ", {name}" and " {name}" vanish cleanly when the name is empty.
     public static func fill(_ template: String, name: String) -> String {
         let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -125,6 +139,7 @@ public struct Chatter: Sendable {
         case .funFact: return Lines.funFacts
         case .breakDone: return Lines.breakDone
         case .welcomeBack: return part == .night ? Lines.welcomeBack + Lines.lateWelcome : Lines.welcomeBack
+        case .hello: return Lines.hello
         case .tapped: return Lines.tapped
         case .focusStart: return Lines.focusStart
         }
@@ -327,6 +342,17 @@ private enum Lines {
 
     static let lateWelcome = [
         "Oh hi! It's late, so don't stay up too long 🌙",
+    ]
+
+    static let hello = [
+        "Oh, hi there! 👋",
+        "Hello, {name}! 💕",
+        "Hi hi! I'm right here 🌱",
+        "Peekaboo! 🙈",
+        "Hey you! Doing okay? 🌷",
+        "Oh! You came to visit me 💕",
+        "Hiya! Nice to see you 😊",
+        "*waves sprout* Hello! 🌱",
     ]
 
     static let tapped = [

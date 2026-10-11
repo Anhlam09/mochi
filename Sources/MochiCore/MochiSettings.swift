@@ -19,6 +19,10 @@ public final class MochiSettings {
     public var chatLevel: String { didSet { defaults.set(chatLevel, forKey: "chatLevel") } }
     /// What Mochi calls the user; empty means no name.
     public var friendName: String { didSet { defaults.set(friendName, forKey: "friendName") } }
+    /// Mochi's colour flavour (raw value of MochiUI.MochiFlavor).
+    public var flavor: String { didSet { defaults.set(flavor, forKey: "flavor") } }
+    /// Switch to the next flavour (with a spin) every couple of hours.
+    public var flavorRotation: Bool { didSet { defaults.set(flavorRotation, forKey: "flavorRotation") } }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -32,12 +36,14 @@ public final class MochiSettings {
         mascotSize = defaults.string(forKey: "mascotSize") ?? "medium"
         calmMode = defaults.object(forKey: "calmMode") as? Bool ?? true
         chatLevel = defaults.string(forKey: "chatLevel").flatMap(ChatLevel.init(rawValue:))?.rawValue
-            ?? ChatLevel.sometimes.rawValue
+            ?? ChatLevel.often.rawValue
+        flavor = defaults.string(forKey: "flavor") ?? "strawberry"
+        flavorRotation = defaults.object(forKey: "flavorRotation") as? Bool ?? true
         friendName = defaults.string(forKey: "friendName")
             ?? NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
     }
 
-    public var chat: ChatLevel { ChatLevel(rawValue: chatLevel) ?? .sometimes }
+    public var chat: ChatLevel { ChatLevel(rawValue: chatLevel) ?? .often }
 
     public var preset: Preset {
         if presetID == "custom" { return .custom(focusMinutes: customFocusMinutes, breakMinutes: customBreakMinutes) }

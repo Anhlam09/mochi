@@ -11,22 +11,27 @@ struct MascotHost: View {
 
     var body: some View {
         MascotView(
-            pose: Self.pose(for: engine),
+            pose: Self.pose(for: engine, talking: Self.bubble(for: engine) == nil && companion.message != nil),
             progress: engine.progress,
             bubbleText: Self.bubble(for: engine) ?? companion.message,
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium,
             hoverText: Self.hoverText(for: engine),
-            calm: settings.calmMode,
-            onTap: { Self.handleTap(engine, companion: companion) }
+            // Low Power Mode always gets the low-CPU animation.
+            calm: settings.calmMode || ProcessInfo.processInfo.isLowPowerModeEnabled,
+            flavor: MochiFlavor(rawValue: settings.flavor) ?? .strawberry,
+            onTap: { Self.handleTap(engine, companion: companion) },
+            onHoverStart: { companion.hovered() }
         )
     }
 
-    static func pose(for engine: TimerEngine) -> MascotPose {
+    /// `talking`: Mochi is saying a friendly line, so idle or working Mochi shows its happy talking face.
+    static func pose(for engine: TimerEngine, talking: Bool = false) -> MascotPose {
         switch engine.phase {
         case .idle:
-            return .idle
+            return talking ? .chatting : .idle
         case .focusing:
-            return engine.remaining <= TimerEngine.almostDoneWindow ? .almostDone : .working
+            if engine.remaining <= TimerEngine.almostDoneWindow { return .almostDone }
+            return talking ? .chatting : .working
         case .breakDue:
             return .breakDue
         case .snoozed:

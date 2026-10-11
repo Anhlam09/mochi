@@ -154,23 +154,30 @@ public struct MascotScene: View {
     let hoverText: String?
     let mascotSize: MascotSize
     let calm: Bool
+    /// Flavour-change spin progress: 0 or 1 at rest, in between while spinning.
+    let spin: Double
     @State private var bubbleSize: CGSize = .zero
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public nonisolated init(pose: MascotPose, progress: Double, bubbleText: String?, t: Double,
                 hover: Bool = false, squish: Double = 0, size: MascotSize = .medium,
-                hoverText: String? = nil, celebrate: Double = 0) {
+                hoverText: String? = nil, celebrate: Double = 0, spin: Double = 0) {
         self.init(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: t,
-                  hover: hover, squish: squish, size: size, hoverText: hoverText, celebrate: celebrate, calm: false)
+                  hover: hover, squish: squish, size: size, hoverText: hoverText, celebrate: celebrate, calm: false,
+                  spin: spin)
     }
 
     nonisolated init(pose: MascotPose, progress: Double, bubbleText: String?, t: Double, blinkT: Double,
-         hover: Bool, squish: Double, size: MascotSize, hoverText: String?, celebrate: Double, calm: Bool) {
+         hover: Bool, squish: Double, size: MascotSize, hoverText: String?, celebrate: Double, calm: Bool,
+         spin: Double = 0) {
         self.pose = pose; self.progress = progress; self.bubbleText = bubbleText
         self.t = t; self.blinkT = blinkT; self.hover = hover; self.squish = squish
         self.mascotSize = size; self.hoverText = hoverText; self.celebrate = celebrate
-        self.calm = calm
+        self.calm = calm; self.spin = spin
     }
+
+    /// Spin progress where the colours swap (Mochi is edge-on, mid second turn).
+    public static let flavorSwapAt = 0.625
 
     private var hasBubble: Bool { !(bubbleText ?? "").isEmpty }
 
@@ -197,10 +204,14 @@ public struct MascotScene: View {
                 ProgressRing(progress: progress, tint: pose.ringTint)
                     .frame(width: 176, height: 40)
                     .offset(y: 10)
-                if calm {
+                let spinning = spin > 0 && spin < 1
+                if calm && !spinning {
                     CalmFigure(pose: pose, hover: hover, squish: squish, celebrate: celebrate).id(pose)
                 } else {
+                    // The spin is a brief SwiftUI-drawn moment, then calm mode takes over again.
                     MascotFigure(pose: pose, t: t, blinkT: blinkT, hover: hover, squish: squish, celebrate: celebrate)
+                        .scaleEffect(x: spinning ? cos(4 * .pi * spin) : 1, y: 1)
+                        .offset(y: spinning ? -12 * sin(.pi * spin) : 0)
                 }
             }
             .padding(.bottom, 14)
@@ -253,18 +264,32 @@ public struct MascotView: View {
     /// Low-CPU mode: no per-frame redraw; slow implicit animations on cheap transforms instead.
     public var calm: Bool
     public var onTap: (() -> Void)?
+    /// Called when the pointer starts hovering over Mochi.
+    public var onHoverStart: (() -> Void)?
+    /// Colour flavour; changing it plays a spin that swaps colours midway.
+    public var flavor: MochiFlavor
+
+    @State private var spinCount = 0
+    /// Flavour shown before the swap point of the current (or last) spin.
+    @State private var spinFrom: MochiFlavor
 
     @State private var hover = false
     @State private var tapCount = 0
     @State private var celebrateCount = 0
     @State private var start = Date()
+    /// When the current pose began; the chatting pose animates from here.
+    @State private var poseStart = Date()
     @State private var hitRects: [CGRect] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.mochiPanelState) private var panelState
 
     public init(pose: MascotPose, progress: Double, bubbleText: String?,
                 size: MascotSize = .medium, hoverText: String? = nil, calm: Bool = false,
-                onTap: (() -> Void)? = nil) {
+                flavor: MochiFlavor = .strawberry,
+                onTap: (() -> Void)? = nil, onHoverStart: (() -> Void)? = nil) {
+        self.flavor = flavor
+        self._spinFrom = State(initialValue: flavor)
+        self.onHoverStart = onHoverStart
         self.calm = calm
         self.size = size
         self.hoverText = hoverText
@@ -280,7 +305,7 @@ public struct MascotView: View {
     /// 30 fps for lively poses, 15 fps for calm ones.
     private var frameInterval: Double {
         switch effectivePose {
-        case .working, .almostDone, .breakDue: 1.0 / 30
+        case .working, .almostDone, .breakDue, .chatting: 1.0 / 30
         case .idle, .paused, .onBreak: 1.0 / 15
         }
     }
@@ -296,16 +321,25 @@ public struct MascotView: View {
             } else {
                 TimelineView(.animation(minimumInterval: frameInterval)) { context in
                     let now = context.date.timeIntervalSince(start)
-                    scene(t: now, blinkT: now, calm: false)
+                    let t = effectivePose == .chatting ? context.date.timeIntervalSince(poseStart) : now
+                    scene(t: t, blinkT: now, calm: false)
                 }
             }
         }
         .contentShape(HitShape(rects: hitRects))
         .onPreferenceChange(HitRectsKey.self) { rects in hitRects = rects }
-        .onHover { hover = $0 }
+        .onHover { inside in
+            if inside, !hover { onHoverStart?() }
+            hover = inside
+        }
         .onChange(of: panelState.dragEpoch) { hover = false }
+        .onChange(of: flavor) { old, _ in
+            spinFrom = old
+            spinCount += 1
+        }
         .onChange(of: pose) { old, new in
-            if old == .onBreak, new == .working, !reduceMotion { celebrateCount += 1 }
+            poseStart = Date()
+            if old == .onBreak, new == .working || new == .chatting, !reduceMotion { celebrateCount += 1 }
         }
         .onTapGesture {
             tapCount += 1
@@ -328,17 +362,26 @@ public struct MascotView: View {
         if reduceMotion {
             MascotScene(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: blinkT,
                         hover: hover, squish: 0, size: size, hoverText: hoverText, celebrate: 0, calm: false)
+                .environment(\.mochiFlavor, flavor)
         } else {
             // The placeholder content is ignored; the scene is rebuilt with the animated values.
-            let tc = tapCount
+            let (tc, cc, from, to) = (tapCount, celebrateCount, spinFrom, flavor)
             Color.clear
-                .keyframeAnimator(initialValue: 0.0, trigger: celebrateCount) { _, c in
-                    SquishLayer(trigger: tc, pose: pose, progress: progress, bubbleText: bubbleText, t: t,
-                                blinkT: blinkT, hover: hover, size: size, hoverText: hoverText,
-                                celebrate: c, calm: calm)
+                .keyframeAnimator(initialValue: 0.0, trigger: spinCount) { _, sp in
+                    Color.clear
+                        .keyframeAnimator(initialValue: 0.0, trigger: cc) { _, c in
+                            SquishLayer(trigger: tc, pose: pose, progress: progress, bubbleText: bubbleText, t: t,
+                                        blinkT: blinkT, hover: hover, size: size, hoverText: hoverText,
+                                        celebrate: c, calm: calm, spin: sp)
+                        } keyframes: { _ in
+                            LinearKeyframe(1.0, duration: 1.1)
+                            LinearKeyframe(0.0, duration: 0.01)
+                        }
+                        .environment(\.mochiFlavor, sp < MascotScene.flavorSwapAt ? from : to)
                 } keyframes: { _ in
-                    LinearKeyframe(1.0, duration: 1.1)
-                    LinearKeyframe(0.0, duration: 0.01)
+                    // Rests at 1 (= finished, new flavour); each spin restarts from 0.
+                    MoveKeyframe(0.0)
+                    CubicKeyframe(1.0, duration: 1.4)
                 }
         }
     }
@@ -357,13 +400,14 @@ private struct SquishLayer: View {
     var hoverText: String?
     var celebrate: Double
     var calm: Bool
+    var spin: Double
 
     nonisolated init(trigger: Int, pose: MascotPose, progress: Double, bubbleText: String?, t: Double,
                      blinkT: Double, hover: Bool, size: MascotSize, hoverText: String?, celebrate: Double,
-                     calm: Bool) {
+                     calm: Bool, spin: Double) {
         self.trigger = trigger; self.pose = pose; self.progress = progress; self.bubbleText = bubbleText
         self.t = t; self.blinkT = blinkT; self.hover = hover; self.size = size
-        self.hoverText = hoverText; self.celebrate = celebrate; self.calm = calm
+        self.hoverText = hoverText; self.celebrate = celebrate; self.calm = calm; self.spin = spin
     }
 
     var body: some View {
@@ -371,7 +415,7 @@ private struct SquishLayer: View {
             .keyframeAnimator(initialValue: 0.0, trigger: trigger) { _, s in
                 MascotScene(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: blinkT,
                             hover: hover, squish: s, size: size, hoverText: hoverText, celebrate: celebrate,
-                            calm: calm)
+                            calm: calm, spin: spin)
             } keyframes: { _ in
                 SpringKeyframe(1.0, duration: 0.12, spring: .init(duration: 0.12, bounce: 0.2))
                 SpringKeyframe(0.0, duration: 0.5, spring: .init(duration: 0.5, bounce: 0.6))

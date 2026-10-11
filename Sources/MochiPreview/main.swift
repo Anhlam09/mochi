@@ -88,12 +88,29 @@ try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories
         // Talking sheet: friendly chatter lines (the longest ones) at each size.
         do {
             let talk = HStack(alignment: .bottom, spacing: 0) {
-                MascotScene(pose: .idle, progress: 0, bubbleText: "Good morning, Anh! ☀️ How are you feeling today?", t: 0.4)
-                MascotScene(pose: .working, progress: 0.4, bubbleText: "Your hard work is adding up, even when it's quiet 🌱", t: 0.4)
-                MascotScene(pose: .working, progress: 0.4, bubbleText: "Boop! You're doing great 💕", t: 0.4, size: .small)
-                MascotScene(pose: .working, progress: 0.4, bubbleText: "How was your day, Christopher? I hope it was kind to you 🌙", t: 0.4, size: .large)
+                MascotScene(pose: .chatting, progress: 0, bubbleText: "Good morning, Anh! ☀️ How are you feeling today?", t: 0.4)
+                MascotScene(pose: .chatting, progress: 0.4, bubbleText: "Your hard work is adding up, even when it's quiet 🌱", t: 0.4)
+                MascotScene(pose: .chatting, progress: 0.4, bubbleText: "Boop! You're doing great 💕", t: 0.4, size: .small)
+                MascotScene(pose: .chatting, progress: 0.4, bubbleText: "How was your day, Christopher? I hope it was kind to you 🌙", t: 0.4, size: .large)
             }
             render(talk, name: "talking_\(mode)", dark: dark)
+        }
+
+        // Flavours: every colour, then a spin from Strawberry to Matcha.
+        do {
+            let flavors = HStack(spacing: 0) {
+                ForEach(MochiFlavor.allCases, id: \.self) { f in
+                    MascotFigure(pose: .idle, t: 0.4).environment(\.mochiFlavor, f)
+                }
+            }.padding(8)
+            render(flavors, name: "flavors_\(mode)", dark: dark)
+            let spin = HStack(spacing: 0) {
+                ForEach([0.0, 0.08, 0.2, 0.35, 0.5, 0.6, 0.7, 0.85, 1.0], id: \.self) { sp in
+                    MascotScene(pose: .chatting, progress: 0, bubbleText: nil, t: 0.4, size: .small, spin: sp)
+                        .environment(\.mochiFlavor, sp < MascotScene.flavorSwapAt ? .strawberry : .matcha)
+                }
+            }
+            render(spin, name: "spin_\(mode)", dark: dark)
         }
 
         // Scenes sheet: full compositions for every pose.

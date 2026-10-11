@@ -36,3 +36,73 @@ extension Font {
         .system(size: size, weight: weight, design: .rounded)
     }
 }
+
+/// Mochi's colour flavours (body, cheeks and sprout). Inspired by classic kawaii pastels:
+/// pastel pink #FFB3C1, mint #B5EAD7, lavender #C9AEFF, sky blue #9AD0FF, peach #FFC29B.
+public enum MochiFlavor: String, CaseIterable, Sendable {
+    case strawberry, matcha, taro, ramune, peach, banana
+
+    public var displayName: String {
+        switch self {
+        case .strawberry: "Strawberry"
+        case .matcha: "Matcha"
+        case .taro: "Taro"
+        case .ramune: "Ramune"
+        case .peach: "Peach"
+        case .banana: "Banana"
+        }
+    }
+
+    public var emoji: String {
+        switch self {
+        case .strawberry: "🍓"
+        case .matcha: "🍵"
+        case .taro: "🍠"
+        case .ramune: "🫧"
+        case .peach: "🍑"
+        case .banana: "🍌"
+        }
+    }
+
+    /// The flavour after this one, wrapping around.
+    public var next: MochiFlavor {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
+
+    public var body: Color {
+        switch self {
+        case .strawberry: Palette.body
+        case .matcha: Palette.dynamic(light: 0xE4F6EC, dark: 0xBFE6D0)
+        case .taro: Palette.dynamic(light: 0xEEE6FF, dark: 0xD5C5F7)
+        case .ramune: Palette.dynamic(light: 0xE2F1FF, dark: 0xC0DDF8)
+        case .peach: Palette.dynamic(light: 0xFFEADB, dark: 0xF7CDAE)
+        case .banana: Palette.dynamic(light: 0xFFF5D6, dark: 0xF2E0A6)
+        }
+    }
+
+    public var blush: Color {
+        switch self {
+        case .strawberry, .matcha, .taro, .ramune: Palette.blush
+        case .peach: Palette.dynamic(light: 0xFFA8A0, dark: 0xEC8F86)
+        case .banana: Palette.dynamic(light: 0xFFC29B, dark: 0xF0A77C)
+        }
+    }
+
+    public var sprout: Color {
+        switch self {
+        case .matcha: Palette.dynamic(light: 0x8FD3A6, dark: 0x6FBE8B)
+        case .taro: Palette.dynamic(light: 0xB5EAD7, dark: 0x8FD3B8)
+        default: Palette.sprout
+        }
+    }
+}
+
+private struct FlavorKey: EnvironmentKey { static let defaultValue = MochiFlavor.strawberry }
+extension EnvironmentValues {
+    /// Colour flavour the mascot draws with.
+    public var mochiFlavor: MochiFlavor {
+        get { self[FlavorKey.self] }
+        set { self[FlavorKey.self] = newValue }
+    }
+}

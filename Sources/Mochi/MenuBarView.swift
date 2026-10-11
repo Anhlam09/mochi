@@ -116,6 +116,20 @@ struct MenuBarView: View {
                     }
                 }
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker("Flavor", selection: $settings.flavor) {
+                        ForEach(MochiFlavor.allCases, id: \.rawValue) { f in
+                            Text("\(f.emoji) \(f.displayName)").tag(f.rawValue)
+                        }
+                    }
+                    .controlSize(.small)
+                    .font(.system(.callout, design: .rounded))
+                    Toggle("New flavor every 2 hours", isOn: $settings.flavorRotation)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .font(.system(.callout, design: .rounded))
+                }
+
                 Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
                     .toggleStyle(.switch)
                     .controlSize(.small)

@@ -5,7 +5,7 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
 ![Mochi's poses](docs/poses_light.png)
 
 ## Features
-- **Floating mascot.** It's always on top, draggable, and never steals focus. It shows on every Space and over fullscreen apps. Choose Small, Medium or Large.
+- **Floating mascot.** It's always on top, draggable, and never steals focus. It shows on every Space and over fullscreen apps. Choose Tiny, Small, Medium or Large.
 - **Menu bar countdown** (`🌱 19:42`), with a popover for these controls:
   - Start, Pause / Resume, Take break now, Skip, Snooze, Reset and Stop
   - **−1 / +1 / +5 min** to adjust the time while the timer runs
@@ -19,16 +19,17 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
   - A notification with **Start break / Snooze 5 min / Skip**.
   - An optional soft chime.
   - Snooze is limited to 2 per break.
-- **Mochi's moods:** working, almost done (yawning), break time (bouncing and waving), on break (sleeping Zzz) and paused (droopy sprout).
-- **Mochi talks to you.** It's a little friend that says sweet, kind things in its speech bubble:
+- **Mochi's moods:** working, almost done (yawning), break time (bouncing and waving), on break (sleeping Zzz), paused (droopy sprout) and chatting (happy eyes, talking smile).
+- **Mochi talks to you.** It's a little friend that says sweet, kind things in its speech bubble, with a happy ^^ face and a smile that moves as it talks:
   - A hello once a day that fits the time ("Good morning, Anh! ☀️ How are you feeling today?"), with extra cheer on Mondays and Fridays.
   - Check-ins now and then ("How's your day going? 🌤️", "Have you had some water yet? 💧"), gentle affirmations, and cute fun facts ("Did you know? Otters hold hands while they sleep 🦦"). It has weekend and seasonal lines, and late at night it nudges you toward bed 🌙.
-  - A welcome back after you step away, a thank-you after a break, and a sweet reply when you tap it.
-  - Choose how often it talks (Off / Sometimes / Often) and what it calls you in Settings. It stays quiet during breaks and just before one is due.
+  - A hi every time it opens and when your mouse wanders over it, a welcome back after you step away, a thank-you after a break, and a sweet reply when you tap it.
+  - Choose how often it talks (Off / Sometimes, about every 8 min / Often, about every 2 min, the default) and what it calls you in Settings. It stays quiet during breaks and just before one is due.
+- **Flavors.** About every 2 hours (only while you're at the computer), Mochi does a little double spin and turns into a new flavor: 🍓 Strawberry, 🍵 Matcha, 🍠 Taro, 🫧 Ramune, 🍑 Peach or 🍌 Banana. The colors are inspired by classic kawaii pastels. Pick a flavor yourself or turn the changes off in Settings.
 - **Click Mochi** to start the timer, start a due break, or resume from pause. Any other time, it says something nice.
 - **Stepping away counts.** Being idle, locked or asleep for 5 minutes or more counts as a break you took, and Mochi starts a fresh focus when you're back.
 - Open at login, start automatically, show or hide Mochi, sound on or off.
-- **Calm mode** (on by default): motion runs in Core Animation, so Mochi uses about 1% CPU while visible, against about 7% in full mode.
+- **Calm mode** (on by default): motion runs in Core Animation, so Mochi uses about 1% CPU while visible, against about 7% in full mode. Low Power Mode always uses calm mode, and Mochi doesn't chat while you're away from the keyboard.
 - Honours Reduce Motion, light and dark mode.
 
 ## Build & run
@@ -59,7 +60,7 @@ swift run MochiPreview ./previews
 Use short timers to watch a whole cycle in seconds:
 
 ```bash
-MOCHI_FOCUS_SECONDS=8 MOCHI_BREAK_SECONDS=6 MOCHI_IDLE_SECONDS=20 MOCHI_CHAT_SECONDS=30 ~/Applications/Mochi.app/Contents/MacOS/Mochi
+MOCHI_FOCUS_SECONDS=8 MOCHI_BREAK_SECONDS=6 MOCHI_IDLE_SECONDS=20 MOCHI_CHAT_SECONDS=30 MOCHI_FLAVOR_SECONDS=60 ~/Applications/Mochi.app/Contents/MacOS/Mochi
 ```
 
 ## Project layout

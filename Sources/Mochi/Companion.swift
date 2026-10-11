@@ -1,6 +1,8 @@
+import CoreGraphics
 import Foundation
 import Observation
 import MochiCore
+import MochiUI
 
 /// Mochi's friendly voice: greets once a day, checks in now and then, and reacts to breaks,
 /// returns and taps. Lines show in the mascot's speech bubble for a few seconds.
@@ -19,7 +21,17 @@ final class Companion {
     /// `MOCHI_CHAT_SECONDS` shortens the gap between unprompted lines (demo mode).
     @ObservationIgnored private let intervalOverride: TimeInterval?
 
-    static let showFor: TimeInterval = 9
+    static let showFor: TimeInterval = 12
+    /// How often Mochi spins into a new colour flavour.
+    static let flavorEvery: TimeInterval = 2 * 3600
+    private static let flavorKey = "lastFlavorChange"
+    /// `MOCHI_FLAVOR_SECONDS` shortens the flavour interval (demo mode).
+    @ObservationIgnored private let flavorOverride = ProcessInfo.processInfo.environment["MOCHI_FLAVOR_SECONDS"].flatMap(Double.init)
+    /// The first unprompted line comes soon after launch, not a whole interval later.
+    static let firstChatAfter: TimeInterval = 45
+    /// At most one hover hello this often, so the time-left pill still shows most of the time.
+    static let helloGap: TimeInterval = 2 * 60
+    @ObservationIgnored private var lastHello: Date?
     private static let greetingKey = "lastGreeting"
 
     init(engine: TimerEngine, settings: MochiSettings, defaults: UserDefaults = .standard,
@@ -35,11 +47,21 @@ final class Companion {
         loopTask = Task { @MainActor [weak self] in
             // Let the panel appear before the first hello.
             try? await Task.sleep(for: .seconds(2))
+            self?.launchHello(Date())
             while !Task.isCancelled {
                 self?.tick(Date())
-                try? await Task.sleep(for: .seconds(15))
+                // Loose tolerance lets macOS batch this wake-up with others (saves battery).
+                try? await Task.sleep(for: .seconds(15), tolerance: .seconds(10))
             }
         }
+    }
+
+    /// Says hi every time Mochi opens (good morning on a new day), and chats again soon after.
+    private func launchHello(_ now: Date) {
+        guard settings.chat != .off, settings.showMascot else { return }
+        if !greetIfNewDay(now) { say(.hello) }
+        lastHello = now
+        nextChat = now.addingTimeInterval(min(Self.firstChatAfter, intervalOverride ?? .infinity))
     }
 
     func handle(_ event: EngineEvent) {
@@ -51,12 +73,24 @@ final class Companion {
         if !greetIfNewDay(Date()) { say(.welcomeBack) }
     }
 
+    /// The mouse moved over Mochi: say hi if it's quiet and it's been a while.
+    func hovered() {
+        let now = Date()
+        guard message == nil, canChatNow,
+              lastHello.map({ now.timeIntervalSince($0) >= Self.helloGap }) ?? true else { return }
+        lastHello = now
+        say(.hello)
+    }
+
     /// Says a line for `moment` now (unless chatting is off) and pushes back the next check-in.
     func say(_ moment: ChatMoment) {
         guard settings.chat != .off else { return }
-        let now = Date()
         chatter.name = settings.friendName
-        let line = chatter.line(for: moment, at: now)
+        show(chatter.line(for: moment, at: Date()))
+    }
+
+    private func show(_ line: String) {
+        let now = Date()
         message = line
         scheduleNext(from: now)
         clearTask?.cancel()
@@ -68,11 +102,34 @@ final class Companion {
     }
 
     private func tick(_ now: Date) {
-        guard settings.chat != .off, settings.showMascot, canChatNow else { return }
+        guard settings.showMascot, !userAway else { return }
+        rotateFlavorIfDue(now)
+        guard settings.chat != .off, canChatNow else { return }
         if greetIfNewDay(now) { return }
         guard let nextChat else { scheduleNext(from: now); return }
         if now >= nextChat { say([.checkIn, .checkIn, .cheer, .cheer, .funFact].randomElement()!) }
     }
+
+    /// Every couple of hours (while you're here to see it), spin into the next flavour and say so.
+    private func rotateFlavorIfDue(_ now: Date) {
+        guard settings.flavorRotation, canChatNow else { return }
+        guard let last = defaults.object(forKey: Self.flavorKey) as? Date else {
+            defaults.set(now, forKey: Self.flavorKey)   // start counting from first launch
+            return
+        }
+        guard now.timeIntervalSince(last) >= (flavorOverride ?? Self.flavorEvery) else { return }
+        defaults.set(now, forKey: Self.flavorKey)
+        let next = (MochiFlavor(rawValue: settings.flavor) ?? .strawberry).next
+        settings.flavor = next.rawValue
+        if settings.chat != .off { show(chatter.flavorLine(name: next.displayName, emoji: next.emoji)) }
+    }
+
+    /// No keyboard or mouse for a while (or the screen is locked): nobody is there to read it.
+    private var userAway: Bool {
+        CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+            >= Self.awayAfter
+    }
+    static let awayAfter: TimeInterval = 120
 
     /// Only chat when Mochi isn't already busy with a break or about to call one.
     private var canChatNow: Bool {

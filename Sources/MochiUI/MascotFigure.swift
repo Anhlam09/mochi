@@ -86,6 +86,9 @@ struct Motion {
     var yawn = 0.0
     var air = 0.0           // 0 on ground, 1 at apex (bounce)
 
+    /// How long the mouth moves when Mochi starts talking.
+    static let talkDuration = 2.16
+
     static func blink(_ bt: Double) -> Double {
         let ph = (bt + 1.9).truncatingRemainder(dividingBy: 3.7)
         if ph >= 0, ph < 0.12 { return 1 - 0.93 * sin(.pi * ph / 0.12) }
@@ -132,6 +135,14 @@ struct Motion {
         case .paused:
             m.sy = 0.92
             m.sx = 1.06
+        case .chatting:
+            // `t` counts from when Mochi started talking: chatter for a moment, then a happy smile.
+            let b = sin(tau * t / 1.2)
+            m.dy = -3 * abs(b)
+            m.sy = 1 + 0.03 * b
+            m.sx = 1 - 0.015 * b
+            m.sway = 5 * sin(tau * t / 1.6)
+            m.yawn = t < Self.talkDuration ? 0.5 + 0.5 * cos(tau * t / 0.36) : 1
         }
         return m
     }
@@ -147,14 +158,15 @@ private enum Face {
 
 /// The squircle body with its gradients, outline and highlight.
 struct StaticBody: View, Equatable {
+    var flavor: MochiFlavor = .strawberry
     var body: some View {
         ZStack {
-            MochiBodyShape().fill(Palette.body)
+            MochiBodyShape().fill(flavor.body)
             MochiBodyShape().fill(
                 RadialGradient(colors: [.white.opacity(0.75), .white.opacity(0)],
                                center: UnitPoint(x: 0.28, y: 0.2), startRadius: 0, endRadius: 75))
             MochiBodyShape().fill(
-                LinearGradient(colors: [Palette.blush.opacity(0), Palette.blush.opacity(0.28)],
+                LinearGradient(colors: [flavor.blush.opacity(0), flavor.blush.opacity(0.28)],
                                startPoint: UnitPoint(x: 0.4, y: 0.5), endPoint: UnitPoint(x: 0.9, y: 1)))
             MochiBodyShape().stroke(Palette.ink.opacity(0.15), lineWidth: 1.5)
             Ellipse().fill(.white.opacity(0.55)).frame(width: 17, height: 8)
@@ -167,19 +179,20 @@ struct StaticBody: View, Equatable {
 /// Two leaves and a stem, anchored at the bottom centre of a 56x36 box.
 struct SproutLeaves: View, Equatable {
     var drooped: Bool
+    var flavor: MochiFlavor = .strawberry
     var body: some View {
         let leafAngle: Double = drooped ? 72 : 34
         ZStack(alignment: .bottom) {
             leaf(angle: -leafAngle - (drooped ? 22 : 0))
             leaf(angle: leafAngle)
-            Capsule().fill(Palette.sprout).frame(width: 4.5, height: 9)
+            Capsule().fill(flavor.sprout).frame(width: 4.5, height: 9)
         }
         .frame(width: 56, height: 36, alignment: .bottom)
     }
 
     private func leaf(angle: Double) -> some View {
         ZStack {
-            LeafShape().fill(Palette.sprout)
+            LeafShape().fill(flavor.sprout)
             LeafShape().fill(LinearGradient(colors: [.white.opacity(0.45), .clear],
                                             startPoint: .topLeading, endPoint: .bottomTrailing))
             LeafShape().stroke(Palette.ink.opacity(0.13), lineWidth: 1)
@@ -193,11 +206,12 @@ struct SproutLeaves: View, Equatable {
 struct BlushGroup: View, Equatable {
     var pose: MascotPose
     var hover: Bool
+    var flavor: MochiFlavor = .strawberry
     var body: some View {
         let y = Face.eyeY(pose) + 14
         ZStack {
             ForEach([20.0, 96.0], id: \.self) { x in
-                Ellipse().fill(Palette.blush.opacity(hover ? 1 : 0.8))
+                Ellipse().fill(flavor.blush.opacity(hover ? 1 : 0.8))
                     .frame(width: 18, height: 11)
                     .blur(radius: 0.6)
                     .position(x: x, y: y)
@@ -223,6 +237,7 @@ struct EyesGroup: View, Equatable {
         case .breakDue: kind = star ? .star : .happy
         case .onBreak: kind = .sleepy
         case .paused: kind = .flat
+        case .chatting: kind = .happy
         }
         return ZStack {
             EyeView(kind: kind, open: open, scale: scale).position(x: Face.lx, y: y + dy)
@@ -235,6 +250,7 @@ struct EyesGroup: View, Equatable {
 struct MouthGroup: View, Equatable {
     var pose: MascotPose
     var yawn: Double = 0
+    var flavor: MochiFlavor = .strawberry
     var body: some View {
         let y = Face.eyeY(pose)
         ZStack {
@@ -248,7 +264,7 @@ struct MouthGroup: View, Equatable {
                 if yawn > 0.05 {
                     ZStack {
                         Ellipse().fill(Palette.ink)
-                        Ellipse().fill(Palette.blush).frame(width: 6 * yawn, height: 5 * yawn).offset(y: 3 * yawn)
+                        Ellipse().fill(flavor.blush).frame(width: 6 * yawn, height: 5 * yawn).offset(y: 3 * yawn)
                     }
                     .frame(width: 5 + 6 * yawn, height: 3 + 11 * yawn)
                     .position(x: 58, y: y + 13)
@@ -258,7 +274,7 @@ struct MouthGroup: View, Equatable {
             case .breakDue:
                 ZStack {
                     HappyMouth().fill(Palette.ink)
-                    HappyMouth().fill(Palette.blush).frame(width: 7, height: 4).offset(y: 2.5)
+                    HappyMouth().fill(flavor.blush).frame(width: 7, height: 4).offset(y: 2.5)
                         .mask(HappyMouth())
                 }
                 .frame(width: 11, height: 6).position(x: 58, y: y + 12)
@@ -266,6 +282,16 @@ struct MouthGroup: View, Equatable {
                 Ellipse().fill(Palette.ink).frame(width: 4, height: 3.4).position(x: 58, y: y + 13)
             case .paused:
                 Capsule().fill(Palette.ink).frame(width: 7, height: 2.2).position(x: 58, y: y + 13)
+            case .chatting:
+                // `yawn` is how open the smile is while talking (1 = full smile).
+                ZStack {
+                    HappyMouth().fill(Palette.ink)
+                    HappyMouth().fill(flavor.blush).frame(width: 7, height: 4).offset(y: 2.5)
+                        .mask(HappyMouth())
+                }
+                .frame(width: 11, height: 7)
+                .scaleEffect(x: 1, y: 0.35 + 0.65 * yawn, anchor: .top)
+                .position(x: 58, y: y + 12)
             }
         }
         .frame(width: Face.bw, height: Face.bh)
@@ -289,9 +315,10 @@ struct ShadowLayer: View, Equatable {
 
 struct ArmView: View {
     var angle: Double
+    var flavor: MochiFlavor = .strawberry
     var body: some View {
         ZStack {
-            Capsule().fill(Palette.body)
+            Capsule().fill(flavor.body)
             Capsule().fill(LinearGradient(colors: [.white.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom))
             Capsule().stroke(Palette.ink.opacity(0.15), lineWidth: 1.2)
         }
@@ -306,8 +333,9 @@ struct ArmView: View {
 private struct SproutSlot: View {
     var pose: MascotPose
     var rotation: Double
+    var flavor: MochiFlavor = .strawberry
     var body: some View {
-        SproutLeaves(drooped: pose == .paused).equatable()
+        SproutLeaves(drooped: pose == .paused, flavor: flavor).equatable()
             .rotationEffect(.degrees(rotation), anchor: .bottom)
             .position(x: Face.bw / 2, y: 5 - 18)
             .frame(width: Face.bw, height: Face.bh)
@@ -327,6 +355,7 @@ public struct MascotFigure: View {
     let squish: Double
     let celebrate: Double
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mochiFlavor) private var flavor
 
     private let groundY = 140.0
 
@@ -369,12 +398,12 @@ public struct MascotFigure: View {
     private func bodyGroup(_ m: Motion) -> some View {
         let star = Int(floor(t / 1.8)) % 2 == 1
         return ZStack {
-            SproutSlot(pose: pose, rotation: pose == .paused ? 14 : m.sway)
-            StaticBody().equatable()
-            BlushGroup(pose: pose, hover: hover).equatable()
+            SproutSlot(pose: pose, rotation: pose == .paused ? 14 : m.sway, flavor: flavor)
+            StaticBody(flavor: flavor).equatable()
+            BlushGroup(pose: pose, hover: hover, flavor: flavor).equatable()
             EyesGroup(pose: pose, open: m.eyeOpen, star: star).equatable()
-            MouthGroup(pose: pose, yawn: m.yawn).equatable()
-            if pose == .breakDue { ArmView(angle: 28 + 30 * sin(2 * .pi * t / 0.45)) }
+            MouthGroup(pose: pose, yawn: m.yawn, flavor: flavor).equatable()
+            if pose == .breakDue { ArmView(angle: 28 + 30 * sin(2 * .pi * t / 0.45), flavor: flavor) }
         }
         .frame(width: Face.bw, height: Face.bh)
     }
@@ -451,6 +480,7 @@ struct CalmFigure: View {
     let squish: Double
     let celebrate: Double
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.mochiFlavor) private var flavor
 
     nonisolated init(pose: MascotPose, hover: Bool, squish: Double, celebrate: Double) {
         self.pose = pose; self.hover = hover; self.squish = squish; self.celebrate = celebrate
@@ -458,7 +488,7 @@ struct CalmFigure: View {
 
     var body: some View {
         ZStack {
-            LayerFigure(pose: pose, hover: hover, squish: squish, celebrate: celebrate, scheme: scheme)
+            LayerFigure(pose: pose, hover: hover, squish: squish, celebrate: celebrate, scheme: scheme, flavor: flavor)
                 .frame(width: 200, height: 150)
             if celebrate > 0 { SparkleBurst(c: celebrate) }
         }
@@ -473,16 +503,17 @@ private struct LayerFigure: NSViewRepresentable {
     let squish: Double
     let celebrate: Double
     let scheme: ColorScheme
+    let flavor: MochiFlavor
 
     func makeNSView(context: Context) -> CalmLayerHost {
         let v = CalmLayerHost()
-        v.build(pose: pose, scheme: scheme)
+        v.build(pose: pose, scheme: scheme, flavor: flavor)
         v.apply(hover: hover, squish: squish, celebrate: celebrate)
         return v
     }
 
     func updateNSView(_ v: CalmLayerHost, context: Context) {
-        if v.pose != pose || v.scheme != scheme { v.build(pose: pose, scheme: scheme) }
+        if v.pose != pose || v.scheme != scheme || v.flavor != flavor { v.build(pose: pose, scheme: scheme, flavor: flavor) }
         v.apply(hover: hover, squish: squish, celebrate: celebrate)
     }
 }
@@ -498,6 +529,7 @@ private struct CalmParts {
 private enum CalmImageCache {
     static let scale: CGFloat = 3
     static var cache: [String: CalmParts] = [:]
+    static var cachedFlavor: MochiFlavor?
 
     static func render<V: View>(_ view: V, scheme: ColorScheme) -> CGImage? {
         let r = ImageRenderer(content: view.frame(width: 200, height: 150).environment(\.colorScheme, scheme))
@@ -510,21 +542,23 @@ private enum CalmImageCache {
         v.frame(width: 116, height: 92).position(x: 100, y: 94).frame(width: 200, height: 150)
     }
 
-    static func parts(_ pose: MascotPose, scheme: ColorScheme) -> CalmParts {
-        let key = "\(pose.rawValue)-\(scheme == .dark ? "d" : "l")"
+    static func parts(_ pose: MascotPose, scheme: ColorScheme, flavor: MochiFlavor) -> CalmParts {
+        // Only the current flavour's images are kept (each pose's parts are a few MB).
+        if flavor != cachedFlavor { cache.removeAll(); cachedFlavor = flavor }
+        let key = "\(pose.rawValue)-\(scheme == .dark ? "d" : "l")-\(flavor.rawValue)"
         if let c = cache[key] { return c }
         var p = CalmParts()
         p.shadow = render(ShadowLayer(air: 0, wide: pose == .paused), scheme: scheme)
-        p.sprout = render(inBody(SproutSlot(pose: pose, rotation: pose == .paused ? 14 : 0)), scheme: scheme)
-        p.body = render(inBody(StaticBody()), scheme: scheme)
-        p.blush = render(inBody(BlushGroup(pose: pose, hover: false)), scheme: scheme)
-        p.blushStrong = render(inBody(BlushGroup(pose: pose, hover: true)), scheme: scheme)
+        p.sprout = render(inBody(SproutSlot(pose: pose, rotation: pose == .paused ? 14 : 0, flavor: flavor)), scheme: scheme)
+        p.body = render(inBody(StaticBody(flavor: flavor)), scheme: scheme)
+        p.blush = render(inBody(BlushGroup(pose: pose, hover: false, flavor: flavor)), scheme: scheme)
+        p.blushStrong = render(inBody(BlushGroup(pose: pose, hover: true, flavor: flavor)), scheme: scheme)
         p.eyes = render(inBody(EyesGroup(pose: pose, open: pose == .almostDone ? 0.55 : 1, star: false)), scheme: scheme)
-        p.mouth = render(inBody(MouthGroup(pose: pose)), scheme: scheme)
+        p.mouth = render(inBody(MouthGroup(pose: pose, yawn: pose == .chatting ? 1 : 0, flavor: flavor)), scheme: scheme)
         switch pose {
         case .breakDue:
             p.eyesStar = render(inBody(EyesGroup(pose: pose, open: 1, star: true)), scheme: scheme)
-            p.arm = render(inBody(ArmView(angle: 0)), scheme: scheme)
+            p.arm = render(inBody(ArmView(angle: 0, flavor: flavor)), scheme: scheme)
             let spots: [(CGPoint, Double, Color)] = [
                 (CGPoint(x: 28, y: 52), 15, Palette.peach), (CGPoint(x: 178, y: 36), 11, Palette.breakRing),
                 (CGPoint(x: 40, y: 22), 9, Palette.peach)]
@@ -532,7 +566,7 @@ private enum CalmImageCache {
                 render(SparkleShape().fill(sp.2).frame(width: sp.1, height: sp.1).position(sp.0), scheme: scheme)
             }
         case .almostDone:
-            p.mouthOpen = render(inBody(MouthGroup(pose: pose, yawn: 1)), scheme: scheme)
+            p.mouthOpen = render(inBody(MouthGroup(pose: pose, yawn: 1, flavor: flavor)), scheme: scheme)
         case .onBreak:
             p.zs = (0..<3).map { k in
                 render(Text(k == 1 ? "Z" : "z").font(.mochi(15, .heavy)).foregroundStyle(Palette.breakRing)
@@ -549,6 +583,7 @@ private enum CalmImageCache {
 final class CalmLayerHost: NSView {
     private(set) var pose: MascotPose?
     private(set) var scheme: ColorScheme?
+    private(set) var flavor: MochiFlavor?
     private let lean = CALayer(), squishL = CALayer()
     private var strong: CALayer?
     private let canvas = CGRect(x: 0, y: 0, width: 200, height: 150)
@@ -597,11 +632,11 @@ final class CalmLayerHost: NSView {
         return a
     }
 
-    func build(pose: MascotPose, scheme: ColorScheme) {
-        self.pose = pose; self.scheme = scheme
+    func build(pose: MascotPose, scheme: ColorScheme, flavor: MochiFlavor) {
+        self.pose = pose; self.scheme = scheme; self.flavor = flavor
         guard let root = layer else { return }
         root.sublayers?.forEach { $0.removeFromSuperlayer() }
-        let parts = MainActor.assumeIsolated { CalmImageCache.parts(pose, scheme: scheme) }
+        let parts = MainActor.assumeIsolated { CalmImageCache.parts(pose, scheme: scheme, flavor: flavor) }
 
         let still = pose == .paused
         let shadow = part(parts.shadow, anchor: CGPoint(x: 100, y: 141))
@@ -622,7 +657,8 @@ final class CalmLayerHost: NSView {
 
         let eyesAnchor = CGPoint(x: 100, y: 48 + Double(pose == .paused ? 50 : 47))
         let eyes = part(parts.eyes, anchor: eyesAnchor)
-        let mouth = part(parts.mouth)
+        // Anchored at the top of the mouth (body top 48 + eye line 47 + 12 − half height) so talking scales in place.
+        let mouth = part(parts.mouth, anchor: pose == .chatting ? CGPoint(x: 100, y: 48 + 47 + 12 - 3.5) : CGPoint(x: 100, y: 75))
         bounce.addSublayer(eyes)
         var eyesStar: CALayer?
         if let img = parts.eyesStar { eyesStar = part(img, anchor: eyesAnchor); bounce.addSublayer(eyesStar!) }
@@ -698,6 +734,11 @@ final class CalmLayerHost: NSView {
                 l.opacity = 0
                 l.add(g, forKey: "z")
             }
+        case .chatting:
+            bounce.add(Self.loop("transform.translation.y", from: 0, to: 3, half: 0.3), forKey: "bob")
+            let talk = Self.loop("transform.scale.y", from: 1, to: 0.35, half: 0.18)
+            talk.repeatCount = Float(Motion.talkDuration / 0.36) * 2
+            mouth.add(talk, forKey: "talk")
         default: break
         }
     }
