@@ -23,6 +23,7 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
 - **Click Mochi** to start the timer, start a due break, or resume from pause.
 - **Stepping away counts.** Being idle, locked or asleep for 5 minutes or more counts as a break you took, and Mochi starts a fresh focus when you're back.
 - Open at login, start automatically, show or hide Mochi, sound on or off.
+- **Calm mode** (on by default): motion runs in Core Animation, so Mochi uses about 1% CPU while visible, against about 7% in full mode.
 - Honours Reduce Motion, light and dark mode.
 
 ## Build & run
@@ -45,6 +46,9 @@ Render the mascot poses to PNG:
 ```bash
 swift run MochiPreview ./previews
 ```
+
+### Debug switches
+`MOCHI_CALM=0/1` forces full or calm animation. `MOCHI_POSE=breakDue` (or another pose) forces a pose.
 
 ### Fast demo mode
 Use short timers to watch a whole cycle in seconds:
