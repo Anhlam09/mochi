@@ -22,7 +22,7 @@ struct MochiApp: App {
 
     static func label(for e: TimerEngine) -> String {
         switch e.phase {
-        case .idle: return "🌱 --:--"
+        case .idle: return "🌱 Start"
         case .focusing: return "\(e.preset.emoji) \(format(e.remaining))"
         case .breakDue: return "☕️ Break!"
         case .snoozed: return "😴 \(format(e.remaining))"

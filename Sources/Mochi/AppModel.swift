@@ -27,14 +27,33 @@ final class AppModel {
             self?.eventHandlers.forEach { $0(event) }
         }
         trackPreset()
-        engine.start()
+        if settings.autoStart { engine.start() }
         engine.startTicking()
 
-        panel = FloatingPanelController(rootView: MascotHost(engine: engine))
+        let nudger = Nudger(engine: engine, settings: settings)
+        self.nudger = nudger
+        eventHandlers.append { nudger.handle($0) }
+
+        panel = FloatingPanelController(
+            rootView: MascotHost(engine: engine, settings: settings),
+            size: MascotSize(rawValue: settings.mascotSize) ?? .medium
+        )
         trackMascotVisibility()
+        trackMascotSize()
     }
 
+    private var nudger: Nudger?
     private var panel: FloatingPanelController?
+
+    /// Resizes the floating panel to match `settings.mascotSize`.
+    private func trackMascotSize() {
+        let raw = withObservationTracking {
+            settings.mascotSize
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.trackMascotSize() }
+        }
+        panel?.setSize(MascotSize(rawValue: raw) ?? .medium)
+    }
 
     /// Shows or hides the floating mascot to match `settings.showMascot`.
     private func trackMascotVisibility() {

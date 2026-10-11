@@ -27,20 +27,24 @@ public struct ProgressRing: View {
 /// Rounded speech bubble with a tail pointing down at the mascot.
 public struct SpeechBubble: View {
     public var text: String
+    var maxWidth: CGFloat = 216
     @State private var shown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(text: String) { self.text = text }
+    init(text: String, maxWidth: CGFloat) { self.text = text; self.maxWidth = maxWidth }
 
     public var body: some View {
         Text(text)
             .font(.mochi(13))
             .foregroundStyle(Palette.text)
             .multilineTextAlignment(.center)
+            .lineLimit(3)
+            .minimumScaleFactor(0.9)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
-            .frame(maxWidth: 200)
+            .frame(maxWidth: maxWidth)
             .padding(.bottom, 8) // room for the tail
             .background(
                 BubbleShape()
@@ -74,7 +78,17 @@ struct BubbleShape: Shape {
 
 /// Static composition of bubble + ring + mascot at a given time. Used by `MascotView` and the preview tool.
 public struct MascotScene: View {
+    /// Base (medium) window size.
     public static let size = CGSize(width: 220, height: 230)
+
+    /// Window size for a given mascot size (rounded to whole points).
+    public static func size(for size: MascotSize) -> CGSize {
+        // Width fits the widest bubble (216pt at bubble scale); height = figure block + headroom
+        // for a 3-line bubble (~76pt at bubble scale).
+        let w = max(Self.size.width * size.scale, 216 * size.bubbleScale + 4)
+        let h = 152 * size.scale + 76 * size.bubbleScale + 2
+        return CGSize(width: w.rounded(.up), height: h.rounded(.up))
+    }
 
     let pose: MascotPose
     let progress: Double
@@ -83,25 +97,27 @@ public struct MascotScene: View {
     let blinkT: Double
     let hover: Bool
     let squish: Double
+    let mascotSize: MascotSize
 
     public nonisolated init(pose: MascotPose, progress: Double, bubbleText: String?, t: Double,
-                hover: Bool = false, squish: Double = 0) {
-        self.init(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: t, hover: hover, squish: squish)
+                hover: Bool = false, squish: Double = 0, size: MascotSize = .medium) {
+        self.init(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: t,
+                  hover: hover, squish: squish, size: size)
     }
 
     nonisolated init(pose: MascotPose, progress: Double, bubbleText: String?, t: Double, blinkT: Double,
-         hover: Bool, squish: Double) {
+         hover: Bool, squish: Double, size: MascotSize) {
         self.pose = pose; self.progress = progress; self.bubbleText = bubbleText
         self.t = t; self.blinkT = blinkT; self.hover = hover; self.squish = squish
+        self.mascotSize = size
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            if let bubbleText, !bubbleText.isEmpty {
-                SpeechBubble(text: bubbleText)
-                    .id(bubbleText)
-                    .transition(.scale(scale: 0.7, anchor: .bottom).combined(with: .opacity))
-            }
+        let s = mascotSize.scale
+        let bs = mascotSize.bubbleScale
+        let win = Self.size(for: mascotSize)
+        let baseH = 164.0 // figure block height at medium
+        ZStack(alignment: .bottom) {
             ZStack(alignment: .bottom) {
                 ProgressRing(progress: progress, tint: pose.ringTint)
                     .frame(width: 176, height: 40)
@@ -109,8 +125,19 @@ public struct MascotScene: View {
                 MascotFigure(pose: pose, t: t, blinkT: blinkT, hover: hover, squish: squish)
             }
             .padding(.bottom, 14)
+            .frame(width: Self.size.width, height: baseH)
+            .scaleEffect(s, anchor: .bottom)
+            .frame(width: win.width, height: baseH * s, alignment: .bottom)
+
+            if let bubbleText, !bubbleText.isEmpty {
+                SpeechBubble(text: bubbleText, maxWidth: min(216, (win.width - 4) / bs))
+                    .id(bubbleText)
+                    .transition(.scale(scale: 0.7, anchor: .bottom).combined(with: .opacity))
+                    .scaleEffect(bs, anchor: .bottom)
+                    .padding(.bottom, (baseH - 12) * s)
+            }
         }
-        .frame(width: Self.size.width, height: Self.size.height, alignment: .bottom)
+        .frame(width: win.width, height: win.height, alignment: .bottom)
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: bubbleText)
     }
 }
@@ -120,6 +147,7 @@ public struct MascotView: View {
     public var pose: MascotPose
     public var progress: Double
     public var bubbleText: String?
+    public var size: MascotSize
     public var onTap: (() -> Void)?
 
     @State private var hover = false
@@ -127,7 +155,9 @@ public struct MascotView: View {
     @State private var start = Date()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(pose: MascotPose, progress: Double, bubbleText: String?, onTap: (() -> Void)? = nil) {
+    public init(pose: MascotPose, progress: Double, bubbleText: String?,
+                size: MascotSize = .medium, onTap: (() -> Void)? = nil) {
+        self.size = size
         self.pose = pose
         self.progress = progress
         self.bubbleText = bubbleText
@@ -154,13 +184,13 @@ public struct MascotView: View {
     @ViewBuilder
     private func scene(t: Double, blinkT: Double) -> some View {
         if reduceMotion {
-            MascotScene(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: blinkT, hover: hover, squish: 0)
+            MascotScene(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: blinkT, hover: hover, squish: 0, size: size)
         } else {
             // The placeholder content is ignored; the scene is rebuilt with the animated squish value.
-            let (pose, progress, bubbleText, hover) = (self.pose, self.progress, self.bubbleText, self.hover)
+            let (pose, progress, bubbleText, hover, size) = (self.pose, self.progress, self.bubbleText, self.hover, self.size)
             Color.clear
                 .keyframeAnimator(initialValue: 0.0, trigger: tapCount) { _, s in
-                    MascotScene(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: blinkT, hover: hover, squish: s)
+                    MascotScene(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: blinkT, hover: hover, squish: s, size: size)
                 } keyframes: { _ in
                     SpringKeyframe(1.0, duration: 0.12, spring: .init(duration: 0.12, bounce: 0.2))
                     SpringKeyframe(0.0, duration: 0.5, spring: .init(duration: 0.5, bounce: 0.6))

@@ -35,8 +35,15 @@ final class MochiHostingView<Content: View>: NSHostingView<Content> {
 /// Wraps the root view: a small drag on the content moves the window; a click without
 /// movement still reaches the inner `onTapGesture` (the drag gesture is *simultaneous* and
 /// has a minimum distance, so it never fires for taps).
+@MainActor
+final class PanelMetrics: ObservableObject {
+    /// Drag threshold in points; scales a little with the mascot size.
+    @Published var dragThreshold: CGFloat = 4
+}
+
 private struct DragHandle<Content: View>: View {
     let content: Content
+    @ObservedObject var metrics: PanelMetrics
     let onDragStart: @MainActor () -> Void
     @State private var dragging = false
 
@@ -44,7 +51,7 @@ private struct DragHandle<Content: View>: View {
         content
             .contentShape(Rectangle())
             .simultaneousGesture(
-                DragGesture(minimumDistance: 4, coordinateSpace: .global)
+                DragGesture(minimumDistance: metrics.dragThreshold, coordinateSpace: .global)
                     .onChanged { _ in
                         guard !dragging else { return }
                         dragging = true
@@ -58,25 +65,35 @@ private struct DragHandle<Content: View>: View {
 @MainActor
 public final class FloatingPanelController {
     public static let panelSize = NSSize(width: 220, height: 230)
+
+    /// Panel size for a mascot size (medium size scaled and rounded).
+    public static func panelSize(for size: MascotSize) -> NSSize {
+        let s = MascotScene.size(for: size)
+        return NSSize(width: s.width, height: s.height)
+    }
     private static let margin: CGFloat = 24
 
     private let panel: MochiPanel
+    private let metrics = PanelMetrics()
+    private var size: MascotSize
     private var screenTask: Task<Void, Never>?
 
     public var isVisible: Bool { panel.isVisible }
 
-    public init<V: View>(rootView: V) {
-        let panel = MochiPanel(contentRect: NSRect(origin: .zero, size: Self.panelSize))
+    public init<V: View>(rootView: V, size: MascotSize = .medium) {
+        let panel = MochiPanel(contentRect: NSRect(origin: .zero, size: Self.panelSize(for: size)))
         self.panel = panel
+        self.size = size
+        metrics.dragThreshold = Self.dragThreshold(for: size)
 
-        let wrapped = DragHandle(content: rootView) { [weak panel] in
+        let wrapped = DragHandle(content: rootView, metrics: metrics) { [weak panel] in
             guard let panel, let event = NSApp.currentEvent else { return }
             panel.performDrag(with: event)
         }
         let hosting = MochiHostingView(rootView: wrapped)
         hosting.sizingOptions = []
         hosting.safeAreaRegions = []
-        hosting.frame = NSRect(origin: .zero, size: Self.panelSize)
+        hosting.frame = NSRect(origin: .zero, size: Self.panelSize(for: size))
         hosting.autoresizingMask = [.width, .height]
         panel.contentView = hosting
 
@@ -84,7 +101,7 @@ public final class FloatingPanelController {
         let restored = panel.setFrameUsingName("MochiPanel")
         panel.setFrameAutosaveName("MochiPanel")
         if restored {
-            panel.setContentSize(Self.panelSize)
+            resize(to: Self.panelSize(for: size))
         } else {
             placeDefault()
         }
@@ -95,6 +112,25 @@ public final class FloatingPanelController {
                 self?.clampToScreen()
             }
         }
+    }
+
+    /// Resizes the panel, keeping its bottom-right corner anchored, and clamps it on screen.
+    public func setSize(_ newSize: MascotSize) {
+        size = newSize
+        metrics.dragThreshold = Self.dragThreshold(for: newSize)
+        resize(to: Self.panelSize(for: newSize))
+        clampToScreen()
+    }
+
+    private static func dragThreshold(for size: MascotSize) -> CGFloat {
+        min(6, max(3, (4 * size.scale).rounded()))
+    }
+
+    private func resize(to target: NSSize) {
+        let f = panel.frame
+        guard f.size != target else { return }
+        let origin = NSPoint(x: f.maxX - target.width, y: f.minY)
+        panel.setFrame(NSRect(origin: origin, size: target), display: true)
     }
 
     public func show() {
@@ -109,9 +145,9 @@ public final class FloatingPanelController {
     private func placeDefault() {
         let area = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let origin = NSPoint(
-            x: area.maxX - Self.panelSize.width - Self.margin,
+            x: area.maxX - Self.panelSize(for: size).width - Self.margin,
             y: area.minY + Self.margin)
-        panel.setFrame(NSRect(origin: origin, size: Self.panelSize), display: false)
+        panel.setFrame(NSRect(origin: origin, size: Self.panelSize(for: size)), display: false)
     }
 
     /// Keeps the panel fully inside the visible area of the screen it overlaps most.

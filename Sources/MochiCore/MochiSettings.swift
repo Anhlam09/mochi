@@ -10,6 +10,9 @@ public final class MochiSettings {
     public var customBreakMinutes: Int { didSet { defaults.set(customBreakMinutes, forKey: "customBreakMinutes") } }
     public var soundEnabled: Bool { didSet { defaults.set(soundEnabled, forKey: "soundEnabled") } }
     public var showMascot: Bool { didSet { defaults.set(showMascot, forKey: "showMascot") } }
+    public var autoStart: Bool { didSet { defaults.set(autoStart, forKey: "autoStart") } }
+    /// "small" | "medium" | "large" (raw values of MochiUI.MascotSize).
+    public var mascotSize: String { didSet { defaults.set(mascotSize, forKey: "mascotSize") } }
     public var launchAtLogin: Bool { didSet { defaults.set(launchAtLogin, forKey: "launchAtLogin") } }
 
     public init(defaults: UserDefaults = .standard) {
@@ -20,6 +23,8 @@ public final class MochiSettings {
         customBreakMinutes = defaults.object(forKey: "customBreakMinutes") as? Int ?? 5
         soundEnabled = defaults.object(forKey: "soundEnabled") as? Bool ?? false
         showMascot = defaults.object(forKey: "showMascot") as? Bool ?? true
+        autoStart = defaults.object(forKey: "autoStart") as? Bool ?? false
+        mascotSize = defaults.string(forKey: "mascotSize") ?? "medium"
         launchAtLogin = defaults.object(forKey: "launchAtLogin") as? Bool ?? false
     }
 

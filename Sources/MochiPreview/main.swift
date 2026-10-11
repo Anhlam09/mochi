@@ -50,6 +50,30 @@ try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories
         }.padding(12)
         render(sheet, name: "contact_sheet_\(mode)", dark: dark)
 
+        if !dark {
+            let sizes = HStack(alignment: .bottom, spacing: 24) {
+                ForEach(MascotSize.allCases, id: \.self) { sz in
+                    MascotScene(pose: .breakDue, progress: 0.7, bubbleText: "Time to stretch! 🌱", t: 0.3, size: sz)
+                        .border(Color.gray.opacity(0.35))
+                }
+            }.padding(16)
+            render(sizes, name: "sizes_light", dark: false)
+        }
+
+        if !dark {
+            let tips = ["Look out the window for 20 seconds — let your eyes wander far away 🌤️",
+                        "3 slow breaths: in through the nose, out through the mouth."]
+            for (i, tip) in tips.enumerated() {
+                let longSizes = HStack(alignment: .bottom, spacing: 24) {
+                    ForEach(MascotSize.allCases, id: \.self) { sz in
+                        MascotScene(pose: .breakDue, progress: 0.7, bubbleText: tip, t: 0.3, size: sz)
+                            .border(Color.gray.opacity(0.35))
+                    }
+                }.padding(16)
+                render(longSizes, name: i == 0 ? "sizes_long" : "sizes_long2", dark: false)
+            }
+        }
+
         // Scenes sheet: full compositions for every pose.
         let scenes = HStack(spacing: 0) {
             ForEach(MascotPose.allCases, id: \.self) { pose in

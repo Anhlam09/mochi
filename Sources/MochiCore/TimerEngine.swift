@@ -12,11 +12,19 @@ public enum Phase: Sendable, Equatable {
     case paused(remaining: TimeInterval, resume: ResumeTarget)
 }
 
-public enum EngineEvent: Sendable, Equatable { case almostDone, breakDue, breakStarted, breakEnded }
+public enum EngineEvent: Sendable, Equatable { case almostDone, breakDue, breakStarted, breakEnded, breakCompleted }
+// `breakEnded` fires whenever a break ends (natural, skip, reset, stop, start); `breakCompleted` additionally
+// fires only when the break timer ran out on its own.
 
 @MainActor @Observable
 public final class TimerEngine {
-    public private(set) var phase: Phase = .idle
+    public private(set) var phase: Phase = .idle {
+        didSet { if Self.tag(oldValue) != Self.tag(phase) { phaseStartedAt = now } }
+    }
+    /// When the current phase kind began (adjusting time does not change it).
+    public private(set) var phaseStartedAt: Date
+    /// Total length of the current focus/break period, including adjustments.
+    public private(set) var periodDuration: TimeInterval = 0
     public private(set) var now: Date
     public private(set) var completedBreaks: Int = 0
     /// Tip for the upcoming/current break. Set on entering breakDue (or break-now), nil while focusing.
@@ -32,6 +40,7 @@ public final class TimerEngine {
                 beginFocus()
             case .paused(_, .focusing):
                 almostDoneFired = false
+                periodDuration = currentSpec.focus
                 phase = .paused(remaining: currentSpec.focus, resume: .focusing)
             default: break
             }
@@ -56,7 +65,9 @@ public final class TimerEngine {
         self.clock = clock
         self.focusOverride = focusOverride
         self.breakOverride = breakOverride
-        self.now = clock()
+        let t = clock()
+        self.now = t
+        self.phaseStartedAt = t
     }
 
     public var currentSpec: BreakSpec {
@@ -73,16 +84,13 @@ public final class TimerEngine {
     }
 
     public var progress: Double {
-        let total: TimeInterval
         switch phase {
         case .idle: return 0
         case .breakDue, .snoozed: return 1
-        case .focusing: total = currentSpec.focus
-        case .onBreak: total = currentSpec.rest
-        case .paused(_, let t): total = t == .focusing ? currentSpec.focus : currentSpec.rest
+        case .focusing, .onBreak, .paused:
+            guard periodDuration > 0 else { return 1 }
+            return min(1, max(0, 1 - remaining / periodDuration))
         }
-        guard total > 0 else { return 1 }
-        return min(1, max(0, 1 - remaining / total))
     }
 
     public var isRunning: Bool {
@@ -121,6 +129,7 @@ public final class TimerEngine {
         switch phase {
         case .breakDue, .snoozed, .focusing:
             if currentTip == nil { currentTip = Tips.random(for: currentSpec.kind) }
+            periodDuration = currentSpec.rest
             phase = .onBreak(end: now.addingTimeInterval(currentSpec.rest))
             fire(.breakStarted)
         default: break
@@ -147,6 +156,41 @@ public final class TimerEngine {
         return true
     }
 
+    /// Shifts the current period's end (or paused remaining) by `seconds`, keeping remaining within 10 s…3 h.
+    /// Works in focusing, onBreak, snoozed and paused; no-op (false) otherwise. Fires no events itself.
+    @discardableResult
+    public func adjust(by seconds: TimeInterval) -> Bool {
+        let kind = Self.tag(phase)
+        tick()
+        guard Self.tag(phase) == kind else { return false }
+        let old = remaining
+        let new = min(3 * 3600, max(min(old, 10), old + seconds))
+        switch phase {
+        case .focusing:
+            phase = .focusing(end: now.addingTimeInterval(new))
+            if new > Self.almostDoneWindow { almostDoneFired = false }
+        case .onBreak: phase = .onBreak(end: now.addingTimeInterval(new))
+        case .snoozed(_, let n): phase = .snoozed(end: now.addingTimeInterval(new), snoozes: n)
+        case .paused(_, let t):
+            phase = .paused(remaining: new, resume: t)
+            if t == .focusing, new > Self.almostDoneWindow { almostDoneFired = false }
+        default: return false
+        }
+        if case .snoozed = phase {} else { periodDuration += new - old }
+        return true
+    }
+
+    /// Back to `.idle`: fires `.breakEnded` if a break was running; clears the tip.
+    public func stop() {
+        refresh()
+        let wasBreak = isOnBreak
+        currentTip = nil
+        almostDoneFired = false
+        periodDuration = 0
+        phase = .idle
+        if wasBreak { fire(.breakEnded) }
+    }
+
     public func reset() {
         restartFocus()
     }
@@ -169,7 +213,7 @@ public final class TimerEngine {
                 currentTip = Tips.random(for: currentSpec.kind)
                 phase = .breakDue(since: now, snoozes: 0)
                 fire(.breakDue)
-            } else if !almostDoneFired, currentSpec.focus > Self.almostDoneWindow,
+            } else if !almostDoneFired, periodDuration > Self.almostDoneWindow,
                       end.timeIntervalSince(now) <= Self.almostDoneWindow {
                 almostDoneFired = true
                 fire(.almostDone)
@@ -184,6 +228,7 @@ public final class TimerEngine {
                 completedBreaks += 1
                 beginFocus()
                 fire(.breakEnded)
+                fire(.breakCompleted)
             }
         default: break
         }
@@ -209,6 +254,17 @@ public final class TimerEngine {
 
     private func refresh() { now = clock() }
 
+    private static func tag(_ p: Phase) -> Int {
+        switch p {
+        case .idle: return 0
+        case .focusing: return 1
+        case .breakDue: return 2
+        case .snoozed: return 3
+        case .onBreak: return 4
+        case .paused(_, let t): return t == .focusing ? 1 : 4
+        }
+    }
+
     private var isOnBreak: Bool {
         switch phase {
         case .onBreak, .paused(_, .onBreak): return true
@@ -227,6 +283,7 @@ public final class TimerEngine {
         refresh()
         currentTip = nil
         almostDoneFired = false
+        periodDuration = currentSpec.focus
         phase = .focusing(end: now.addingTimeInterval(currentSpec.focus))
     }
 

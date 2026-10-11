@@ -67,7 +67,7 @@ final class TestClock: @unchecked Sendable {
         c.advance(21); e.tick()
         guard case .focusing = e.phase else { expect(false, "\(e.phase)"); return }
         expect(e.completedBreaks == 1)
-        expect(log.events.contains(.breakStarted) && log.events.last == .breakEnded)
+        expect(log.events.contains(.breakStarted) && log.events.suffix(2) == [.breakEnded, .breakCompleted])
     }
     check("break-now while focusing") {
         let (e, _, _) = makeEngine()
@@ -160,6 +160,9 @@ final class TestClock: @unchecked Sendable {
         d.removePersistentDomain(forName: suite)
     }
     runReviewChecks()
+    runAdjustChecks()
+    runStopChecks()
+    runM4ReviewChecks()
 }
 
 @MainActor private func runReviewChecks() {
@@ -249,5 +252,124 @@ final class TestClock: @unchecked Sendable {
         for _ in 0..<10 { c.advance(1); e.tick(); expect(e.currentTip == tip) }
         c.advance(100); e.tick()
         expect(e.currentTip == nil)
+    }
+}
+
+@MainActor private func runAdjustChecks() {
+    check("adjust in focusing/onBreak/snoozed/paused") {
+        let (e, c, _) = makeEngine()
+        e.start()
+        expect(e.adjust(by: 300) && e.remaining == 1500)
+        e.pause(); expect(e.adjust(by: -60) && e.remaining == 1440)
+        c.advance(30); e.resume(); expect(e.remaining == 1440)
+        c.advance(1500); e.tick()
+        e.snooze(minutes: 5)
+        expect(e.adjust(by: 60) && e.remaining == 360)
+        c.advance(361); e.tick(); e.startBreak()
+        expect(e.adjust(by: 60) && e.remaining == 80, "\(e.remaining)")
+    }
+    check("adjust clamps to 10s…3h") {
+        let (e, _, _) = makeEngine()
+        e.start()
+        e.adjust(by: -100_000); expect(e.remaining == 10, "\(e.remaining)")
+        e.adjust(by: 1_000_000); expect(e.remaining == 10_800, "\(e.remaining)")
+    }
+    check("adjust no-op in idle/breakDue") {
+        let (e, c, log) = makeEngine()
+        expect(!e.adjust(by: 60))
+        e.start(); c.advance(1201); e.tick()
+        expect(!e.adjust(by: 60))
+        guard case .breakDue = e.phase else { expect(false); return }
+        expect(log.events == [.breakDue])
+    }
+    check("adjust keeps progress continuous & in range") {
+        let (e, c, _) = makeEngine()
+        e.start(); c.advance(600); e.tick()
+        let before = e.progress
+        e.adjust(by: 300)
+        expect(abs(before * 1200 - e.progress * e.periodDuration) < 0.001, "elapsed preserved")
+        expect(e.periodDuration == 1500)
+        e.adjust(by: -100_000)
+        expect(e.progress >= 0 && e.progress <= 1)
+        e.adjust(by: 100_000)
+        expect(e.progress >= 0 && e.progress <= 1)
+    }
+    check("adjust re-arms almostDone") {
+        let (e, c, log) = makeEngine()
+        e.start(); c.advance(1100); e.tick()
+        expect(log.events == [.almostDone])
+        e.adjust(by: 300)
+        c.advance(300); e.tick()
+        expect(log.events == [.almostDone, .almostDone], "\(log.events)")
+        expect(!log.events.contains(.breakDue))
+    }
+    check("phaseStartedAt set on phase change only") {
+        let (e, c, _) = makeEngine()
+        e.start(); c.advance(10); e.tick(); e.adjust(by: 60)
+        let t0 = e.phaseStartedAt
+        c.advance(5); e.tick(); e.adjust(by: 60)
+        expect(e.phaseStartedAt == t0)
+        e.startBreak()
+        expect(e.phaseStartedAt == c.date)
+    }
+}
+
+@MainActor private func runStopChecks() {
+    check("stop → idle, clears tip, fires breakEnded if on break") {
+        let (e, c, log) = makeEngine()
+        e.start(); e.stop()
+        expect(e.phase == .idle && e.currentTip == nil && log.events.isEmpty)
+        e.start(); c.advance(1201); e.tick(); e.startBreak(); e.stop()
+        expect(e.phase == .idle && e.currentTip == nil)
+        expect(log.events.filter { $0 == .breakEnded }.count == 1)
+        expect(e.completedBreaks == 0 && e.progress == 0)
+        c.advance(5000); e.tick()
+        expect(e.phase == .idle)
+    }
+    check("autoStart persists, default false") {
+        let suite = "mochi.checks3"
+        let d = UserDefaults(suiteName: suite)!
+        d.removePersistentDomain(forName: suite)
+        let s = MochiSettings(defaults: d)
+        expect(!s.autoStart)
+        s.autoStart = true
+        expect(MochiSettings(defaults: d).autoStart)
+        d.removePersistentDomain(forName: suite)
+    }
+}
+
+@MainActor private func runM4ReviewChecks() {
+    check("breakCompleted only on natural end") {
+        let (e, c, log) = makeEngine()
+        e.start(); e.startBreak(); e.skipBreak()
+        e.startBreak(); e.reset()
+        e.startBreak(); e.stop()
+        expect(!log.events.contains(.breakCompleted), "\(log.events)")
+        e.start(); e.startBreak(); c.advance(21); e.tick()
+        expect(log.events.filter { $0 == .breakCompleted }.count == 1)
+        expect(log.events.filter { $0 == .breakEnded }.count == 4)
+    }
+    check("adjust returns false if tick changed phase") {
+        let (e, c, _) = makeEngine()
+        e.start(); e.startBreak()
+        c.advance(20.1)
+        expect(!e.adjust(by: 300))
+        guard case .focusing = e.phase else { expect(false, "\(e.phase)"); return }
+        expect(e.remaining == 1200, "\(e.remaining)")
+    }
+    check("lower clamp never lengthens") {
+        let (e, c, _) = makeEngine()
+        e.start(); e.startBreak(); c.advance(15)
+        e.adjust(by: -60)
+        expect(abs(e.remaining - 5) < 0.001, "\(e.remaining)")
+    }
+    check("pause/resume keep phaseStartedAt") {
+        let (e, c, _) = makeEngine()
+        e.start(); let t0 = e.phaseStartedAt
+        c.advance(10); e.pause(); c.advance(10); e.resume()
+        expect(e.phaseStartedAt == t0)
+        e.startBreak(); let t1 = e.phaseStartedAt
+        c.advance(3); e.pause(); c.advance(3); e.resume()
+        expect(e.phaseStartedAt == t1 && t1 != t0)
     }
 }

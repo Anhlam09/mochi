@@ -1,5 +1,6 @@
 import SwiftUI
 import MochiCore
+import MochiUI
 
 private let lavender = Color(red: 0xB5/255, green: 0xA8/255, blue: 0xFF/255)
 private let sky = Color(red: 0x8F/255, green: 0xD9/255, blue: 0xF0/255)
@@ -40,6 +41,7 @@ struct MenuBarView: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 ProgressView(value: engine.progress).tint(accent)
+                adjustRow
             }
             .padding(14)
             .frame(maxWidth: .infinity)
@@ -68,6 +70,27 @@ struct MenuBarView: View {
                 .controlSize(.small)
                 .font(.system(.callout, design: .rounded))
 
+            if settings.showMascot {
+                Picker("Size", selection: $settings.mascotSize) {
+                    ForEach(MascotSize.allCases, id: \.rawValue) { size in
+                        Text(size.displayName).tag(size.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+                .font(.system(.callout, design: .rounded))
+            }
+
+            Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .font(.system(.callout, design: .rounded))
+
+            Toggle("Sound", isOn: $settings.soundEnabled)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .font(.system(.callout, design: .rounded))
+
             Button("Quit Mochi") { NSApp.terminate(nil) }
                 .buttonStyle(.plain)
                 .font(.system(.caption, design: .rounded))
@@ -82,19 +105,20 @@ struct MenuBarView: View {
         VStack(spacing: 8) {
             switch engine.phase {
             case .idle:
-                pill("Start", lavender) { engine.start() }
+                pill("Start focus 🌱", lavender) { engine.start() }
             case .focusing:
                 pill("Take break now", sky) { engine.startBreak() }
                 HStack(spacing: 8) {
                     pill("Pause", lavender) { engine.pause() }
                     pill("Reset", lavender) { engine.reset() }
+                    pill("Stop", lavender) { engine.stop() }
                 }
             case .breakDue(_, let n):
                 pill("Start break", sky) { engine.startBreak() }
                 HStack(spacing: 8) {
-                    pill("Snooze 5 min", blush, disabled: n >= TimerEngine.maxSnoozes) { engine.snooze(minutes: 5) }
                     pill("Skip", lavender) { engine.skipBreak() }
                 }
+                snoozeRow(used: n)
             case .snoozed:
                 pill("Start break", sky) { engine.startBreak() }
                 pill("Skip break", lavender) { engine.skipBreak() }
@@ -102,12 +126,58 @@ struct MenuBarView: View {
                 HStack(spacing: 8) {
                     pill("Pause", lavender) { engine.pause() }
                     pill("Skip break", lavender) { engine.skipBreak() }
+                    pill("Stop", lavender) { engine.stop() }
                 }
             case .paused:
                 HStack(spacing: 8) {
                     pill("Resume", sky) { engine.resume() }
                     pill("Reset", lavender) { engine.reset() }
+                    pill("Stop", lavender) { engine.stop() }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder private var adjustRow: some View {
+        switch engine.phase {
+        case .focusing, .onBreak, .snoozed, .paused:
+            HStack(spacing: 6) {
+                ForEach([(-1, "−1"), (1, "+1"), (5, "+5")], id: \.0) { m, label in
+                    Button { engine.adjust(by: Double(m) * 60) } label: {
+                        Text(label)
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .monospacedDigit()
+                            .padding(.horizontal, 10).padding(.vertical, 3)
+                            .background(accent.opacity(0.4), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                Text("min").font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func snoozeRow(used: Int) -> some View {
+        let maxed = used >= TimerEngine.maxSnoozes
+        return VStack(spacing: 4) {
+            HStack(spacing: 6) {
+                Text("Snooze").font(.system(.caption, design: .rounded)).foregroundStyle(.secondary)
+                ForEach([1, 5, 10], id: \.self) { m in
+                    Button { engine.snooze(minutes: m) } label: {
+                        Text("\(m) min")
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .background(blush.opacity(maxed ? 0.12 : 0.4), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(maxed)
+                }
+            }
+            if used == TimerEngine.maxSnoozes - 1 {
+                Text("Last snooze 💤").font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
             }
         }
     }

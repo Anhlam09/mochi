@@ -6,12 +6,14 @@ import MochiUI
 /// shows the current tip in a bubble, and handles taps on Mochi.
 struct MascotHost: View {
     let engine: TimerEngine
+    let settings: MochiSettings
 
     var body: some View {
         MascotView(
             pose: Self.pose(for: engine),
             progress: engine.progress,
             bubbleText: Self.bubble(for: engine),
+            size: MascotSize(rawValue: settings.mascotSize) ?? .medium,
             onTap: { Self.handleTap(engine) }
         )
     }
@@ -37,6 +39,8 @@ struct MascotHost: View {
         switch engine.phase {
         case .breakDue:
             return engine.currentTip ?? "Break time! Tap me 🌱"
+        case .onBreak:
+            return engine.now.timeIntervalSince(engine.phaseStartedAt) < 4 ? "Ahh, rest time ☁️" : nil
         default:
             return nil
         }
