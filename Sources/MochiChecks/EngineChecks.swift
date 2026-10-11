@@ -338,6 +338,16 @@ final class TestClock: @unchecked Sendable {
         expect(MochiSettings(defaults: d).autoStart)
         d.removePersistentDomain(forName: suite)
     }
+    check("calmMode persists, default true") {
+        let suite = "mochi.checks4"
+        let d = UserDefaults(suiteName: suite)!
+        d.removePersistentDomain(forName: suite)
+        let s = MochiSettings(defaults: d)
+        expect(s.calmMode)
+        s.calmMode = false
+        expect(!MochiSettings(defaults: d).calmMode)
+        d.removePersistentDomain(forName: suite)
+    }
 }
 
 @MainActor private func runM4ReviewChecks() {

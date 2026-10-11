@@ -13,6 +13,8 @@ public final class MochiSettings {
     public var autoStart: Bool { didSet { defaults.set(autoStart, forKey: "autoStart") } }
     /// "small" | "medium" | "large" (raw values of MochiUI.MascotSize).
     public var mascotSize: String { didSet { defaults.set(mascotSize, forKey: "mascotSize") } }
+    /// Gentler, low-CPU animation for the floating mascot.
+    public var calmMode: Bool { didSet { defaults.set(calmMode, forKey: "calmMode") } }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -24,6 +26,7 @@ public final class MochiSettings {
         showMascot = defaults.object(forKey: "showMascot") as? Bool ?? true
         autoStart = defaults.object(forKey: "autoStart") as? Bool ?? false
         mascotSize = defaults.string(forKey: "mascotSize") ?? "medium"
+        calmMode = defaults.object(forKey: "calmMode") as? Bool ?? true
     }
 
     public var preset: Preset {

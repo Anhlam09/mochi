@@ -103,6 +103,11 @@ struct MenuBarView: View {
                     .controlSize(.small)
                     .font(.system(.callout, design: .rounded))
 
+                Toggle("Calm mode (saves battery)", isOn: $settings.calmMode)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(.system(.callout, design: .rounded))
+
                 Toggle("Sound", isOn: $settings.soundEnabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)
