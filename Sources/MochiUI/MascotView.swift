@@ -153,6 +153,7 @@ public struct MascotScene: View {
     let celebrate: Double
     let hoverText: String?
     let mascotSize: MascotSize
+    let calm: Bool
     @State private var bubbleSize: CGSize = .zero
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -160,14 +161,15 @@ public struct MascotScene: View {
                 hover: Bool = false, squish: Double = 0, size: MascotSize = .medium,
                 hoverText: String? = nil, celebrate: Double = 0) {
         self.init(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: t,
-                  hover: hover, squish: squish, size: size, hoverText: hoverText, celebrate: celebrate)
+                  hover: hover, squish: squish, size: size, hoverText: hoverText, celebrate: celebrate, calm: false)
     }
 
     nonisolated init(pose: MascotPose, progress: Double, bubbleText: String?, t: Double, blinkT: Double,
-         hover: Bool, squish: Double, size: MascotSize, hoverText: String?, celebrate: Double) {
+         hover: Bool, squish: Double, size: MascotSize, hoverText: String?, celebrate: Double, calm: Bool) {
         self.pose = pose; self.progress = progress; self.bubbleText = bubbleText
         self.t = t; self.blinkT = blinkT; self.hover = hover; self.squish = squish
         self.mascotSize = size; self.hoverText = hoverText; self.celebrate = celebrate
+        self.calm = calm
     }
 
     private var hasBubble: Bool { !(bubbleText ?? "").isEmpty }
@@ -195,7 +197,11 @@ public struct MascotScene: View {
                 ProgressRing(progress: progress, tint: pose.ringTint)
                     .frame(width: 176, height: 40)
                     .offset(y: 10)
-                MascotFigure(pose: pose, t: t, blinkT: blinkT, hover: hover, squish: squish, celebrate: celebrate)
+                if calm {
+                    CalmFigure(pose: pose, hover: hover, squish: squish, celebrate: celebrate).id(pose)
+                } else {
+                    MascotFigure(pose: pose, t: t, blinkT: blinkT, hover: hover, squish: squish, celebrate: celebrate)
+                }
             }
             .padding(.bottom, 14)
             .frame(width: Self.size.width, height: baseH)
@@ -223,6 +229,20 @@ public struct MascotScene: View {
     }
 }
 
+/// Debug switches, read once from the environment: `MOCHI_CALM=1|0` forces calm / full mode,
+/// `MOCHI_POSE=<pose>` forces a pose (handy for measuring CPU).
+enum MochiDebug {
+    static let calmOverride: Bool? = {
+        switch ProcessInfo.processInfo.environment["MOCHI_CALM"] {
+        case "1": true
+        case "0": false
+        default: nil
+        }
+    }()
+    static let poseOverride: MascotPose? =
+        ProcessInfo.processInfo.environment["MOCHI_POSE"].flatMap { MascotPose(rawValue: $0) }
+}
+
 /// Live, animated Mochi: hover lean, click squish, Reduce Motion aware.
 public struct MascotView: View {
     public var pose: MascotPose
@@ -230,6 +250,8 @@ public struct MascotView: View {
     public var bubbleText: String?
     public var size: MascotSize
     public var hoverText: String?
+    /// Low-CPU mode: no per-frame redraw; slow implicit animations on cheap transforms instead.
+    public var calm: Bool
     public var onTap: (() -> Void)?
 
     @State private var hover = false
@@ -241,7 +263,9 @@ public struct MascotView: View {
     @Environment(\.mochiPanelState) private var panelState
 
     public init(pose: MascotPose, progress: Double, bubbleText: String?,
-                size: MascotSize = .medium, hoverText: String? = nil, onTap: (() -> Void)? = nil) {
+                size: MascotSize = .medium, hoverText: String? = nil, calm: Bool = false,
+                onTap: (() -> Void)? = nil) {
+        self.calm = calm
         self.size = size
         self.hoverText = hoverText
         self.pose = pose
@@ -250,9 +274,12 @@ public struct MascotView: View {
         self.onTap = onTap
     }
 
+    private var effectivePose: MascotPose { MochiDebug.poseOverride ?? pose }
+    private var isCalm: Bool { MochiDebug.calmOverride ?? calm }
+
     /// 30 fps for lively poses, 15 fps for calm ones.
     private var frameInterval: Double {
-        switch pose {
+        switch effectivePose {
         case .working, .almostDone, .breakDue: 1.0 / 30
         case .idle, .paused, .onBreak: 1.0 / 15
         }
@@ -260,13 +287,16 @@ public struct MascotView: View {
 
     public var body: some View {
         Group {
-            if reduceMotion {
+            if reduceMotion || !panelState.isActive || (isCalm && effectivePose == .paused) {
                 // Static frame: no timeline, no blink.
-                scene(t: 0, blinkT: 0)
+                scene(t: 0, blinkT: 0, calm: false)
+            } else if isCalm {
+                // No per-frame redraw: CalmFigure animates cheap transforms on its own.
+                scene(t: 0, blinkT: 0, calm: true)
             } else {
-                TimelineView(.animation(minimumInterval: frameInterval, paused: !panelState.isActive)) { context in
+                TimelineView(.animation(minimumInterval: frameInterval)) { context in
                     let now = context.date.timeIntervalSince(start)
-                    scene(t: now, blinkT: now)
+                    scene(t: now, blinkT: now, calm: false)
                 }
             }
         }
@@ -287,24 +317,25 @@ public struct MascotView: View {
     }
 
     private var accessibilityText: String {
-        if let bubbleText, !bubbleText.isEmpty { return "\(pose.accessibilityDescription). \(bubbleText)" }
-        return pose.accessibilityDescription
+        if let bubbleText, !bubbleText.isEmpty { return "\(effectivePose.accessibilityDescription). \(bubbleText)" }
+        return effectivePose.accessibilityDescription
     }
 
     @ViewBuilder
-    private func scene(t: Double, blinkT: Double) -> some View {
+    private func scene(t: Double, blinkT: Double, calm: Bool) -> some View {
         let hoverText = hover ? self.hoverText : nil
+        let (pose, progress, bubbleText, hover, size) = (effectivePose, self.progress, self.bubbleText, self.hover, self.size)
         if reduceMotion {
             MascotScene(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: blinkT,
-                        hover: hover, squish: 0, size: size, hoverText: hoverText, celebrate: 0)
+                        hover: hover, squish: 0, size: size, hoverText: hoverText, celebrate: 0, calm: false)
         } else {
             // The placeholder content is ignored; the scene is rebuilt with the animated values.
-            let (pose, progress, bubbleText, hover, size) = (self.pose, self.progress, self.bubbleText, self.hover, self.size)
             let tc = tapCount
             Color.clear
                 .keyframeAnimator(initialValue: 0.0, trigger: celebrateCount) { _, c in
                     SquishLayer(trigger: tc, pose: pose, progress: progress, bubbleText: bubbleText, t: t,
-                                blinkT: blinkT, hover: hover, size: size, hoverText: hoverText, celebrate: c)
+                                blinkT: blinkT, hover: hover, size: size, hoverText: hoverText,
+                                celebrate: c, calm: calm)
                 } keyframes: { _ in
                     LinearKeyframe(1.0, duration: 1.1)
                     LinearKeyframe(0.0, duration: 0.01)
@@ -325,19 +356,22 @@ private struct SquishLayer: View {
     var size: MascotSize
     var hoverText: String?
     var celebrate: Double
+    var calm: Bool
 
     nonisolated init(trigger: Int, pose: MascotPose, progress: Double, bubbleText: String?, t: Double,
-                     blinkT: Double, hover: Bool, size: MascotSize, hoverText: String?, celebrate: Double) {
+                     blinkT: Double, hover: Bool, size: MascotSize, hoverText: String?, celebrate: Double,
+                     calm: Bool) {
         self.trigger = trigger; self.pose = pose; self.progress = progress; self.bubbleText = bubbleText
         self.t = t; self.blinkT = blinkT; self.hover = hover; self.size = size
-        self.hoverText = hoverText; self.celebrate = celebrate
+        self.hoverText = hoverText; self.celebrate = celebrate; self.calm = calm
     }
 
     var body: some View {
         Color.clear
             .keyframeAnimator(initialValue: 0.0, trigger: trigger) { _, s in
                 MascotScene(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: blinkT,
-                            hover: hover, squish: s, size: size, hoverText: hoverText, celebrate: celebrate)
+                            hover: hover, squish: s, size: size, hoverText: hoverText, celebrate: celebrate,
+                            calm: calm)
             } keyframes: { _ in
                 SpringKeyframe(1.0, duration: 0.12, spring: .init(duration: 0.12, bounce: 0.2))
                 SpringKeyframe(0.0, duration: 0.5, spring: .init(duration: 0.5, bounce: 0.6))

@@ -15,6 +15,7 @@ struct MascotHost: View {
             bubbleText: Self.bubble(for: engine),
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium,
             hoverText: Self.hoverText(for: engine),
+            calm: settings.calmMode,
             onTap: { Self.handleTap(engine) }
         )
     }
