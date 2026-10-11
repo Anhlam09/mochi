@@ -63,6 +63,11 @@ struct MenuBarView: View {
                 .font(.system(.callout, design: .rounded))
             }
 
+            Toggle("Show Mochi on screen", isOn: $settings.showMascot)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .font(.system(.callout, design: .rounded))
+
             Button("Quit Mochi") { NSApp.terminate(nil) }
                 .buttonStyle(.plain)
                 .font(.system(.caption, design: .rounded))

@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import MochiCore
+import MochiUI
 
 /// Owns the single engine + settings for the app. Starts ticking once on first access.
 @MainActor
@@ -28,6 +29,21 @@ final class AppModel {
         trackPreset()
         engine.start()
         engine.startTicking()
+
+        panel = FloatingPanelController(rootView: MascotHost(engine: engine))
+        trackMascotVisibility()
+    }
+
+    private var panel: FloatingPanelController?
+
+    /// Shows or hides the floating mascot to match `settings.showMascot`.
+    private func trackMascotVisibility() {
+        let visible = withObservationTracking {
+            settings.showMascot
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.trackMascotVisibility() }
+        }
+        if visible { panel?.show() } else { panel?.hide() }
     }
 
     /// Single place where settings → engine.preset is synced.
