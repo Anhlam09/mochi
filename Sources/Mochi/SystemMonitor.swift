@@ -9,6 +9,7 @@ final class SystemMonitor {
     private let threshold: TimeInterval
     private var idle = IdleTracker()
     private var away = AwayTracker()
+    private var gate = NaturalBreakGate()
     private var pollTask: Task<Void, Never>?
     private var tokens: [(center: NotificationCenter, token: NSObjectProtocol)] = []
 
@@ -54,16 +55,24 @@ final class SystemMonitor {
 
     private func returned(_ awayFor: TimeInterval?) {
         guard let awayFor else { return }
-        if AwayPolicy.action(awayFor: awayFor, phase: engine.phase, threshold: threshold) == .naturalBreak {
-            engine.naturalBreak()
+        let age = Date().timeIntervalSince(engine.phaseStartedAt)
+        if AwayPolicy.action(awayFor: awayFor, phase: engine.phase, threshold: threshold, phaseAge: age) == .naturalBreak {
+            triggerNaturalBreak()
         }
     }
 
     private func pollIdle() {
+        if away.isAway { return }
         let seconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState,
                                                               eventType: CGEventType(rawValue: ~0)!)
-        if idle.update(idleFor: seconds, phase: engine.phase, threshold: threshold) == .naturalBreak {
-            engine.naturalBreak()
+        let age = Date().timeIntervalSince(engine.phaseStartedAt)
+        if idle.update(idleFor: seconds, phase: engine.phase, threshold: threshold, phaseAge: age) == .naturalBreak {
+            triggerNaturalBreak()
         }
+    }
+
+    private func triggerNaturalBreak() {
+        guard gate.allow(at: Date(), threshold: threshold) else { return }
+        engine.naturalBreak()
     }
 }

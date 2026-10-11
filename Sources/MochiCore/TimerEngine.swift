@@ -34,6 +34,8 @@ public final class TimerEngine {
     public var preset: Preset {
         didSet {
             guard oldValue != preset else { return }
+            // Editing custom minutes in place: new lengths apply from the next period.
+            if oldValue.id == "custom" && preset.id == "custom" { return }
             completedBreaks = 0
             switch phase {
             case .focusing:
@@ -107,7 +109,7 @@ public final class TimerEngine {
     }
 
     public func pause() {
-        tick()
+        step(force: true)
         switch phase {
         case .focusing: phase = .paused(remaining: remaining, resume: .focusing)
         case .onBreak: phase = .paused(remaining: remaining, resume: .onBreak)
@@ -161,7 +163,7 @@ public final class TimerEngine {
     @discardableResult
     public func adjust(by seconds: TimeInterval) -> Bool {
         let kind = Self.tag(phase)
-        tick()
+        step(force: true)
         guard Self.tag(phase) == kind else { return false }
         let old = remaining
         let new = min(3 * 3600, max(min(old, 10), old + seconds))
@@ -205,8 +207,17 @@ public final class TimerEngine {
         }
     }
 
-    public func tick() {
-        refresh()
+    /// Derives transitions from the clock. `now` (and so observers) only update about once a
+    /// second, or when a transition is due.
+    public func tick() { step(force: false) }
+
+    private func step(force: Bool) {
+        let t = clock()
+        if !force {
+            let sameSecond = Int(t.timeIntervalSinceReferenceDate.rounded(.down)) == Int(now.timeIntervalSinceReferenceDate.rounded(.down))
+            if sameSecond && !transitionDue(at: t) { return }
+        }
+        now = t
         switch phase {
         case .focusing(let end):
             if now >= end {
@@ -238,7 +249,7 @@ public final class TimerEngine {
         guard tickTask == nil else { return }
         tickTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(500))
+                try? await Task.sleep(for: .milliseconds(250), tolerance: .milliseconds(100))
                 guard let self else { return }
                 self.tick()
             }
@@ -251,6 +262,16 @@ public final class TimerEngine {
     }
 
     // MARK: Helpers
+
+    private func transitionDue(at t: Date) -> Bool {
+        switch phase {
+        case .focusing(let end):
+            return t >= end || (!almostDoneFired && periodDuration > Self.almostDoneWindow
+                                && end.timeIntervalSince(t) <= Self.almostDoneWindow)
+        case .snoozed(let end, _), .onBreak(let end): return t >= end
+        default: return false
+        }
+    }
 
     private func refresh() { now = clock() }
 
@@ -285,6 +306,7 @@ public final class TimerEngine {
         almostDoneFired = false
         periodDuration = currentSpec.focus
         phase = .focusing(end: now.addingTimeInterval(currentSpec.focus))
+        phaseStartedAt = now
     }
 
     private func fire(_ e: EngineEvent) { onEvent?(e) }

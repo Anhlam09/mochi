@@ -3,19 +3,24 @@ import MochiCore
 import MochiUI
 import ServiceManagement
 
-private let lavender = Color(red: 0xB5/255, green: 0xA8/255, blue: 0xFF/255)
-private let sky = Color(red: 0x8F/255, green: 0xD9/255, blue: 0xF0/255)
-private let blush = Color(red: 0xFF/255, green: 0xB3/255, blue: 0xC1/255)
+private let lavender = Palette.focusRing
+private let sky = Palette.breakRing
+private let blush = Palette.blush
 
 struct MenuBarView: View {
     let engine: TimerEngine
     let settings: MochiSettings
     @State private var loginStatus = LaunchAtLogin.status
+    @State private var loginError: String?
 
     private func setLaunchAtLogin(_ on: Bool) {
-        do { try LaunchAtLogin.set(on) } catch {}
+        do {
+            try LaunchAtLogin.set(on)
+            loginError = nil
+        } catch {
+            loginError = "Couldn't change login item: \(error.localizedDescription)"
+        }
         loginStatus = LaunchAtLogin.status
-        settings.launchAtLogin = LaunchAtLogin.isEnabled
     }
 
     private var caption: String {
@@ -81,7 +86,9 @@ struct MenuBarView: View {
                     .font(.system(.callout, design: .rounded))
 
                 if settings.showMascot {
-                    Picker("Size", selection: $settings.mascotSize) {
+                    Picker("Size", selection: Binding(
+                    get: { settings.mascotSize },
+                    set: { raw in AppModel.shared.setMascotSize(MascotSize(rawValue: raw) ?? .medium) })) {
                         ForEach(MascotSize.allCases, id: \.rawValue) { size in
                             Text(size.displayName).tag(size.rawValue)
                         }
@@ -102,13 +109,19 @@ struct MenuBarView: View {
                     .font(.system(.callout, design: .rounded))
 
                 Toggle("Open Mochi at login", isOn: Binding(
-                    get: { settings.launchAtLogin },
+                    get: { LaunchAtLogin.isEnabled(loginStatus) },
                     set: { setLaunchAtLogin($0) }))
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .font(.system(.callout, design: .rounded))
+                if let loginError {
+                    Text(loginError)
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if loginStatus == .requiresApproval {
-                    Text("Approve in System Settings → Login Items")
+                    Text("Waiting for approval: approve in System Settings → Login Items")
                         .font(.system(.caption2, design: .rounded))
                         .foregroundStyle(.secondary)
                     Button("Open Login Items") { LaunchAtLogin.openLoginItemsSettings() }
@@ -126,7 +139,7 @@ struct MenuBarView: View {
         }
         .padding(14)
         .frame(width: 260)
-        .onAppear { loginStatus = LaunchAtLogin.status }
+        .onAppear { loginStatus = LaunchAtLogin.status; loginError = nil }
         .font(.system(.body, design: .rounded))
     }
 
@@ -180,6 +193,7 @@ struct MenuBarView: View {
                             .background(accent.opacity(0.4), in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(m == -1 ? "Subtract 1 minute" : "Add \(m) minute\(m == 1 ? "" : "s")")
                 }
                 Text("min").font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
             }
@@ -203,6 +217,7 @@ struct MenuBarView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(maxed)
+                    .accessibilityLabel("Snooze \(m) minute\(m == 1 ? "" : "s")")
                 }
             }
             if used == TimerEngine.maxSnoozes - 1 {

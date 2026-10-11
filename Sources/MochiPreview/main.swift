@@ -74,6 +74,17 @@ try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories
             }
         }
 
+        do {
+            let extras = HStack(spacing: 0) {
+                MascotScene(pose: .working, progress: 0.5, bubbleText: nil, t: 0.4, hover: true, hoverText: "12:34 left")
+                MascotScene(pose: .working, progress: 0.5, bubbleText: nil, t: 0.4, size: .small, hoverText: nil)
+                MascotScene(pose: .working, progress: 0.5, bubbleText: nil, t: 0.4, celebrate: 0.25)
+                MascotScene(pose: .working, progress: 0.5, bubbleText: nil, t: 0.4, celebrate: 0.6)
+                MascotScene(pose: .working, progress: 0.5, bubbleText: nil, t: 0.4, hover: true, size: .small, hoverText: "12:34 left")
+            }
+            render(extras, name: "hover_celebrate_\(mode)", dark: dark)
+        }
+
         // Scenes sheet: full compositions for every pose.
         let scenes = HStack(spacing: 0) {
             ForEach(MascotPose.allCases, id: \.self) { pose in

@@ -24,23 +24,41 @@ final class MochiPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Hosting view that accepts the very first click (the panel is never key) and does NOT
-/// turn mouse-downs into window drags itself: SwiftUI decides tap vs. drag (see `DragHandle`).
-@MainActor
-final class MochiHostingView<Content: View>: NSHostingView<Content> {
-    override var mouseDownCanMoveWindow: Bool { false }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-}
-
-/// Wraps the root view: a small drag on the content moves the window; a click without
-/// movement still reaches the inner `onTapGesture` (the drag gesture is *simultaneous* and
-/// has a minimum distance, so it never fires for taps).
+/// Shared state between the controller, the hosting view and the SwiftUI wrapper.
 @MainActor
 final class PanelMetrics: ObservableObject {
-    /// Drag threshold in points; scales a little with the mascot size.
-    @Published var dragThreshold: CGFloat = 4
+    /// Fixed drag threshold (points) at every size.
+    static let dragThreshold: CGFloat = 6
+    /// Visible and not occluded: drives whether the mascot animates.
+    @Published var isActive = true
+    /// Incremented whenever a window drag ends (the mascot resets its hover state).
+    @Published var dragEpoch = 0
+    /// Regions (top-left coords in window space) that accept clicks; empty = everything.
+    @Published var hitRects: [CGRect] = []
+    /// The most recent left mouse-down delivered to the hosting view.
+    var lastMouseDown: NSEvent?
+
+    func accepts(windowPointTopLeft p: CGPoint) -> Bool {
+        hitRects.isEmpty || hitRects.contains { $0.insetBy(dx: -2, dy: -2).contains(p) }
+    }
 }
 
+/// Hosting view that accepts the very first click (the panel is never key) and does NOT turn
+/// mouse-downs into window drags itself; it records the mouse-down so the drag can start from it.
+@MainActor
+final class MochiHostingView<Content: View>: NSHostingView<Content> {
+    var metrics: PanelMetrics?
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {
+        metrics?.lastMouseDown = event
+        super.mouseDown(with: event) // SwiftUI still sees the press (tap / drag gestures)
+    }
+}
+
+/// Wraps the root view. A click without movement reaches the inner `onTapGesture`; once the
+/// pointer moves more than 6pt, the simultaneous DragGesture starts the system window drag from the
+/// recorded mouse-down. Hit-testing is limited to the figure (and bubble) rects.
 private struct DragHandle<Content: View>: View {
     let content: Content
     @ObservedObject var metrics: PanelMetrics
@@ -49,14 +67,19 @@ private struct DragHandle<Content: View>: View {
 
     var body: some View {
         content
-            .contentShape(Rectangle())
+            .contentShape(HitShape(rects: metrics.hitRects))
+            .onPreferenceChange(HitRectsKey.self) { rects in
+                Task { @MainActor in metrics.hitRects = rects }
+            }
+            .environment(\.mochiPanelState, PanelState(isActive: metrics.isActive, dragEpoch: metrics.dragEpoch))
             .simultaneousGesture(
-                DragGesture(minimumDistance: metrics.dragThreshold, coordinateSpace: .global)
+                DragGesture(minimumDistance: PanelMetrics.dragThreshold, coordinateSpace: .global)
                     .onChanged { _ in
                         guard !dragging else { return }
                         dragging = true
                         onDragStart() // runs the system window-drag loop until mouse-up
                         dragging = false
+                        metrics.dragEpoch += 1
                     }
             )
     }
@@ -76,6 +99,7 @@ public final class FloatingPanelController {
     private let panel: MochiPanel
     private let metrics = PanelMetrics()
     private var size: MascotSize
+    private var monitors: [Any] = []
     private var screenTask: Task<Void, Never>?
 
     public var isVisible: Bool { panel.isVisible }
@@ -84,13 +108,15 @@ public final class FloatingPanelController {
         let panel = MochiPanel(contentRect: NSRect(origin: .zero, size: Self.panelSize(for: size)))
         self.panel = panel
         self.size = size
-        metrics.dragThreshold = Self.dragThreshold(for: size)
 
+        let metrics = self.metrics
         let wrapped = DragHandle(content: rootView, metrics: metrics) { [weak panel] in
-            guard let panel, let event = NSApp.currentEvent else { return }
+            // Start from the recorded mouse-down; fall back to the current event.
+            guard let panel, let event = metrics.lastMouseDown ?? NSApp.currentEvent else { return }
             panel.performDrag(with: event)
         }
         let hosting = MochiHostingView(rootView: wrapped)
+        hosting.metrics = metrics
         hosting.sizingOptions = []
         hosting.safeAreaRegions = []
         hosting.frame = NSRect(origin: .zero, size: Self.panelSize(for: size))
@@ -107,6 +133,10 @@ public final class FloatingPanelController {
         }
         clampToScreen()
 
+        panel.acceptsMouseMovedEvents = true
+        observeActivity()
+        installMouseMonitors()
+
         screenTask = Task { @MainActor [weak self] in
             for await _ in NotificationCenter.default.notifications(named: NSApplication.didChangeScreenParametersNotification).map({ _ in () }) {
                 self?.clampToScreen()
@@ -117,13 +147,8 @@ public final class FloatingPanelController {
     /// Resizes the panel, keeping its bottom-right corner anchored, and clamps it on screen.
     public func setSize(_ newSize: MascotSize) {
         size = newSize
-        metrics.dragThreshold = Self.dragThreshold(for: newSize)
         resize(to: Self.panelSize(for: newSize))
         clampToScreen()
-    }
-
-    private static func dragThreshold(for size: MascotSize) -> CGFloat {
-        min(6, max(3, (4 * size.scale).rounded()))
     }
 
     private func resize(to target: NSSize) {
@@ -136,10 +161,61 @@ public final class FloatingPanelController {
     public func show() {
         clampToScreen()
         panel.orderFrontRegardless()
+        updateActivity()
     }
 
     public func hide() {
         panel.orderOut(nil)
+        updateActivity()
+    }
+
+    // MARK: activity (stop animating when nobody can see Mochi)
+
+    private func updateActivity() {
+        let active = panel.isVisible && panel.occlusionState.contains(.visible)
+        if metrics.isActive != active { metrics.isActive = active }
+    }
+
+    private func observeActivity() {
+        let nc = NotificationCenter.default
+        let panel = self.panel
+        for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.didChangeScreenNotification] {
+            let token = nc.addObserver(forName: name, object: panel, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateActivity() }
+            }
+            monitors.append(token)
+        }
+    }
+
+    // MARK: click-through for transparent areas
+
+    /// The panel ignores the mouse while the pointer is over blank (non-figure) areas of
+    /// its frame, so clicks fall through to the windows below.
+    private func installMouseMonitors() {
+        let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateMouseTransparency() }
+        }
+        let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
+            MainActor.assumeIsolated { self?.updateMouseTransparency() }
+            return event
+        }
+        monitors.append(contentsOf: [global, local].compactMap { $0 })
+    }
+
+    private func updateMouseTransparency() {
+        guard panel.isVisible, NSEvent.pressedMouseButtons == 0 else { return }
+        let loc = NSEvent.mouseLocation
+        let f = panel.frame
+        var ignore = false
+        if f.contains(loc) {
+            let p = CGPoint(x: loc.x - f.minX, y: f.maxY - loc.y)
+            ignore = !metrics.accepts(windowPointTopLeft: p)
+        }
+        if panel.ignoresMouseEvents != ignore {
+            panel.ignoresMouseEvents = ignore
+            // No exit event arrives once the window ignores the mouse: reset hover explicitly.
+            if ignore { metrics.dragEpoch += 1 }
+        }
     }
 
     private func placeDefault() {

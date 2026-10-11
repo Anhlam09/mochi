@@ -13,7 +13,6 @@ public final class MochiSettings {
     public var autoStart: Bool { didSet { defaults.set(autoStart, forKey: "autoStart") } }
     /// "small" | "medium" | "large" (raw values of MochiUI.MascotSize).
     public var mascotSize: String { didSet { defaults.set(mascotSize, forKey: "mascotSize") } }
-    public var launchAtLogin: Bool { didSet { defaults.set(launchAtLogin, forKey: "launchAtLogin") } }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -25,7 +24,6 @@ public final class MochiSettings {
         showMascot = defaults.object(forKey: "showMascot") as? Bool ?? true
         autoStart = defaults.object(forKey: "autoStart") as? Bool ?? false
         mascotSize = defaults.string(forKey: "mascotSize") ?? "medium"
-        launchAtLogin = defaults.object(forKey: "launchAtLogin") as? Bool ?? false
     }
 
     public var preset: Preset {

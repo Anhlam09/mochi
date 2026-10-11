@@ -148,33 +148,51 @@ public struct MascotFigure: View {
     let blinkT: Double
     let hover: Bool
     let squish: Double
+    let celebrate: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let bw = 116.0, bh = 92.0
     private let groundY = 140.0
 
     public init(pose: MascotPose, t: Double, hover: Bool = false, squish: Double = 0) {
-        self.init(pose: pose, t: t, blinkT: t, hover: hover, squish: squish)
+        self.init(pose: pose, t: t, blinkT: t, hover: hover, squish: squish, celebrate: 0)
     }
 
-    init(pose: MascotPose, t: Double, blinkT: Double, hover: Bool, squish: Double) {
+    nonisolated init(pose: MascotPose, t: Double, blinkT: Double, hover: Bool, squish: Double, celebrate: Double) {
         self.pose = pose; self.t = t; self.blinkT = blinkT; self.hover = hover; self.squish = squish
+        self.celebrate = celebrate
     }
 
     public var body: some View {
-        let m = Motion.make(pose, t: t, blinkT: blinkT)
+        let m = motion()
         let s = max(0, min(1, squish))
+        let leaning = hover && !reduceMotion
         ZStack {
             shadow(m)
             bodyGroup(m)
                 .scaleEffect(x: m.sx * (1 + 0.15 * s), y: m.sy * (1 - 0.15 * s), anchor: .bottom)
-                .rotationEffect(.degrees(hover ? 4 : 0), anchor: .bottom)
+                .rotationEffect(.degrees(leaning ? 4 : 0), anchor: .bottom)
                 .offset(y: m.dy)
                 .position(x: 100, y: groundY - bh / 2)
             if pose == .breakDue { twinkles }
+            if celebrate > 0 { burst }
             if pose == .onBreak { zLetters }
         }
         .frame(width: Self.canvasSize.width, height: Self.canvasSize.height)
-        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: hover)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: hover)
+    }
+
+    private func motion() -> Motion {
+        var m = Motion.make(pose, t: t, blinkT: blinkT)
+        if celebrate > 0 {
+            // Happy hop after finishing a break: one hop, then a soft landing squash.
+            let hp = min(celebrate / 0.5, 1)
+            m.dy -= 24 * sin(.pi * hp)
+            let land = celebrate > 0.5 ? sin(.pi * min((celebrate - 0.5) / 0.2, 1)) : 0
+            m.sy -= 0.08 * land; m.sx += 0.05 * land
+            m.air = max(m.air, sin(.pi * hp))
+        }
+        return m
     }
 
     // MARK: pieces
@@ -319,6 +337,22 @@ public struct MascotFigure: View {
             SparklePoint(color: Palette.peach, size: 15, phase: t / 1.1).position(x: 28, y: 52)
             SparklePoint(color: Palette.breakRing, size: 11, phase: t / 1.3 + 0.35).position(x: 178, y: 36)
             SparklePoint(color: Palette.peach, size: 9, phase: t / 0.9 + 0.7).position(x: 40, y: 22)
+        }
+    }
+
+    private var burst: some View {
+        let c = celebrate
+        let ease = 1 - pow(1 - c, 3)
+        let colors = [Palette.peach, Palette.breakRing, Palette.sprout, Palette.blush]
+        return ZStack {
+            ForEach(0..<8, id: \.self) { k in
+                let a = Double(k) / 8 * 2 * .pi + 0.3
+                SparkleShape().fill(colors[k % 4])
+                    .frame(width: 13 * (1 - 0.5 * c), height: 13 * (1 - 0.5 * c))
+                    .rotationEffect(.degrees(c * 90))
+                    .opacity(min(1, (1 - c) * 1.6))
+                    .position(x: 100 + cos(a) * (38 + 52 * ease), y: 85 + sin(a) * (30 + 42 * ease))
+            }
         }
     }
 

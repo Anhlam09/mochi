@@ -14,6 +14,7 @@ struct MascotHost: View {
             progress: engine.progress,
             bubbleText: Self.bubble(for: engine),
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium,
+            hoverText: Self.hoverText(for: engine),
             onTap: { Self.handleTap(engine) }
         )
     }
@@ -32,6 +33,19 @@ struct MascotHost: View {
             return .onBreak
         case .paused:
             return .paused
+        }
+    }
+
+    /// Small "time left" pill shown while hovering over Mochi.
+    static func hoverText(for engine: TimerEngine) -> String? {
+        let time = MochiApp.format(engine.remaining)
+        switch engine.phase {
+        case .idle: return "Tap me to start 🌱"
+        case .focusing: return "\(time) left"
+        case .onBreak: return "Break: \(time)"
+        case .snoozed: return "Snoozing: \(time)"
+        case .paused: return "Paused · \(time)"
+        case .breakDue: return nil
         }
     }
 

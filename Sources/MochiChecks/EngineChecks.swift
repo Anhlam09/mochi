@@ -150,12 +150,12 @@ final class TestClock: @unchecked Sendable {
         d.removePersistentDomain(forName: suite)
         let s = MochiSettings(defaults: d)
         expect(s.presetID == "gentle" && s.customFocusMinutes == 30 && s.customBreakMinutes == 5)
-        expect(!s.soundEnabled && s.showMascot && !s.launchAtLogin)
+        expect(!s.soundEnabled && s.showMascot)
         s.presetID = "custom"; s.customFocusMinutes = 45; s.customBreakMinutes = 10
-        s.soundEnabled = true; s.showMascot = false; s.launchAtLogin = true
+        s.soundEnabled = true; s.showMascot = false
         let t = MochiSettings(defaults: d)
         expect(t.presetID == "custom" && t.customFocusMinutes == 45 && t.customBreakMinutes == 10)
-        expect(t.soundEnabled && !t.showMascot && t.launchAtLogin)
+        expect(t.soundEnabled && !t.showMascot)
         expect(t.preset.spec(forCycle: 0).focus == 2700)
         d.removePersistentDomain(forName: suite)
     }
@@ -164,6 +164,7 @@ final class TestClock: @unchecked Sendable {
     runStopChecks()
     runM4ReviewChecks()
     runAwayChecks()
+    runM6Checks()
 }
 
 @MainActor private func runReviewChecks() {
@@ -410,5 +411,46 @@ final class TestClock: @unchecked Sendable {
         expect(tr.unlock(at: t0.addingTimeInterval(700)) == nil)
         tr.sleep(at: t0.addingTimeInterval(1000))
         expect(tr.wake(at: t0.addingTimeInterval(1100)) == 100)
+    }
+}
+
+@MainActor private func runM6Checks() {
+    check("idle spanning a break doesn't count against new focus") {
+        let f = Phase.focusing(end: Date())
+        expect(AwayPolicy.action(awayFor: 300, phase: f, threshold: 300, phaseAge: 10) == .none)
+        var tr = IdleTracker()
+        expect(tr.update(idleFor: 300, phase: f, threshold: 300, phaseAge: 10) == .none)
+        expect(tr.update(idleFor: 600, phase: f, threshold: 300, phaseAge: 301) == .naturalBreak)
+    }
+    check("NaturalBreakGate drops double trigger") {
+        var g = NaturalBreakGate()
+        let t = Date(timeIntervalSince1970: 0)
+        expect(g.allow(at: t, threshold: 300))
+        expect(!g.allow(at: t.addingTimeInterval(100), threshold: 300))
+        expect(g.allow(at: t.addingTimeInterval(400), threshold: 300))
+        var a = AwayTracker(); a.lock(at: t)
+        expect(a.isAway); _ = a.unlock(at: t); expect(!a.isAway)
+    }
+    check("custom minute edits don't restart focus or reset breaks") {
+        let c = TestClock()
+        let e = TimerEngine(preset: .custom(focusMinutes: 30, breakMinutes: 5), clock: { c.date })
+        e.start(); e.startBreak(); e.skipBreak(); c.advance(100)
+        let before = e.phase
+        e.preset = .custom(focusMinutes: 45, breakMinutes: 5)
+        expect(e.completedBreaks == 1 && e.phase == before)
+        expect(e.currentSpec.focus == 2700)
+        e.preset = .pomodoro
+        expect(e.completedBreaks == 0 && e.remaining == 1500)
+    }
+    check("tick only publishes now once per second") {
+        let c = TestClock()
+        let e = TimerEngine(clock: { c.date })
+        e.start()
+        let n0 = e.now
+        c.advance(0.01); e.tick()
+        let sameSecond = Int(c.date.timeIntervalSinceReferenceDate.rounded(.down)) == Int(n0.timeIntervalSinceReferenceDate.rounded(.down))
+        expect(sameSecond ? e.now == n0 : e.now == c.date)
+        c.advance(1.5); e.tick()
+        expect(e.now == c.date)
     }
 }
