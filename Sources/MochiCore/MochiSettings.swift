@@ -24,6 +24,14 @@ public final class MochiSettings {
     /// Switch to the next flavour (with a spin) every couple of hours.
     public var flavorRotation: Bool { didSet { defaults.set(flavorRotation, forKey: "flavorRotation") } }
 
+    /// To-do agent (all local): master switch, wrap-up time, and the optional gentle nudges.
+    public var todosEnabled: Bool { didSet { defaults.set(todosEnabled, forKey: "todosEnabled") } }
+    public var todoNudges: Bool { didSet { defaults.set(todoNudges, forKey: "todoNudges") } }
+    /// Show the to-do's text in reminder notifications (off: "You have a to-do now").
+    public var todoNotificationText: Bool { didSet { defaults.set(todoNotificationText, forKey: "todoNotificationText") } }
+    public var todoWrapUpHour: Int { didSet { defaults.set(todoWrapUpHour, forKey: "todoWrapUpHour") } }
+    public var todoWrapUpMinute: Int { didSet { defaults.set(todoWrapUpMinute, forKey: "todoWrapUpMinute") } }
+
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let stored = defaults.string(forKey: "presetID") ?? "gentle"
@@ -39,8 +47,18 @@ public final class MochiSettings {
             ?? ChatLevel.often.rawValue
         flavor = defaults.string(forKey: "flavor") ?? "strawberry"
         flavorRotation = defaults.object(forKey: "flavorRotation") as? Bool ?? true
+        todosEnabled = defaults.object(forKey: "todosEnabled") as? Bool ?? true
+        todoNudges = defaults.object(forKey: "todoNudges") as? Bool ?? true
+        todoNotificationText = defaults.object(forKey: "todoNotificationText") as? Bool ?? true
+        todoWrapUpHour = min(23, max(0, defaults.object(forKey: "todoWrapUpHour") as? Int ?? 17))
+        todoWrapUpMinute = min(59, max(0, defaults.object(forKey: "todoWrapUpMinute") as? Int ?? 30))
         friendName = defaults.string(forKey: "friendName")
             ?? NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
+    }
+
+    public var todoAgent: TodoAgentSettings {
+        TodoAgentSettings(todosEnabled: todosEnabled, wrapUpHour: todoWrapUpHour,
+                          wrapUpMinute: todoWrapUpMinute, nudges: todoNudges)
     }
 
     public var chat: ChatLevel { ChatLevel(rawValue: chatLevel) ?? .often }

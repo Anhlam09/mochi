@@ -8,20 +8,31 @@ struct MascotHost: View {
     let engine: TimerEngine
     let settings: MochiSettings
     let companion: Companion
+    let todos: TodoStore
+    let todoCoordinator: TodoCoordinator
 
     var body: some View {
+        let todoLine = companion.todoLine
         MascotView(
-            pose: Self.pose(for: engine, talking: Self.bubble(for: engine) == nil && companion.message != nil),
+            pose: Self.pose(for: engine, talking: todoLine != nil || (Self.bubble(for: engine) == nil && companion.message != nil)),
             progress: engine.progress,
-            bubbleText: Self.bubble(for: engine) ?? companion.message,
+            bubbleText: todoLine ?? Self.bubble(for: engine) ?? companion.message,
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium,
             hoverText: Self.hoverText(for: engine),
             // Low Power Mode always gets the low-CPU animation.
             calm: settings.calmMode || ProcessInfo.processInfo.isLowPowerModeEnabled,
             flavor: MochiFlavor(rawValue: settings.flavor) ?? .strawberry,
             onTap: { Self.handleTap(engine, companion: companion) },
-            onHoverStart: { companion.hovered() }
+            onHoverStart: { companion.hovered() },
+            todoBadge: settings.todosEnabled ? Self.leftToday(todos, todoCoordinator) : nil,
+            onTodoTap: { todoCoordinator.toggleCard() }
         )
+    }
+
+    /// Reads the day clock so the count refreshes at midnight.
+    static func leftToday(_ todos: TodoStore, _ coordinator: TodoCoordinator) -> Int {
+        _ = coordinator.dayClock.day
+        return todos.counts(now: Date()).left
     }
 
     /// `talking`: Mochi is saying a friendly line, so idle or working Mochi shows its happy talking face.
@@ -70,6 +81,8 @@ struct MascotHost: View {
     /// Tapping Mochi does the obvious thing for the moment: start a due break,
     /// or wake up from a pause. Otherwise Mochi just says something sweet.
     static func handleTap(_ engine: TimerEngine, companion: Companion) {
+        // A to-do line in the bubble: tapping Mochi opens the card instead.
+        if companion.consumeTodoTap() { return }
         switch engine.phase {
         case .breakDue, .snoozed:
             engine.startBreak()

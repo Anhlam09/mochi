@@ -10,6 +10,8 @@ private let blush = Palette.blush
 struct MenuBarView: View {
     let engine: TimerEngine
     let settings: MochiSettings
+    let todos: TodoStore
+    let onOpenTodos: () -> Void
     @State private var loginStatus = LaunchAtLogin.status
     @State private var loginError: String?
 
@@ -78,6 +80,8 @@ struct MenuBarView: View {
                 .font(.system(.callout, design: .rounded))
             }
 
+            if settings.todosEnabled { todoRow }
+
             DisclosureGroup("Settings ⚙︎") {
               VStack(alignment: .leading, spacing: 8) {
                 Toggle("Show Mochi on screen", isOn: $settings.showMascot)
@@ -130,6 +134,33 @@ struct MenuBarView: View {
                         .font(.system(.callout, design: .rounded))
                 }
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("To-dos", isOn: $settings.todosEnabled)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .font(.system(.callout, design: .rounded))
+                    if settings.todosEnabled {
+                        Toggle("Gentle nudges", isOn: $settings.todoNudges)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .font(.system(.callout, design: .rounded))
+                        Stepper("Wrap-up at \(Self.clock(settings.todoWrapUpHour, settings.todoWrapUpMinute))",
+                                value: Binding(
+                                    get: { settings.todoWrapUpHour * 60 + settings.todoWrapUpMinute },
+                                    set: { settings.todoWrapUpHour = $0 / 60; settings.todoWrapUpMinute = $0 % 60 }),
+                                in: 12 * 60...23 * 60 + 45, step: 15)
+                            .font(.system(.callout, design: .rounded))
+                            .disabled(!settings.todoNudges)
+                        Toggle("Show to-do text in notifications", isOn: $settings.todoNotificationText)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .font(.system(.callout, design: .rounded))
+                        Text("Your list stays on this Mac, never sent anywhere.")
+                            .font(.system(.caption2, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -178,6 +209,28 @@ struct MenuBarView: View {
         .frame(width: 260)
         .onAppear { loginStatus = LaunchAtLogin.status; loginError = nil }
         .font(.system(.body, design: .rounded))
+    }
+
+    private static func clock(_ h: Int, _ m: Int) -> String {
+        let hour12 = h % 12 == 0 ? 12 : h % 12
+        return String(format: "%d:%02d %@", hour12, m, h < 12 ? "AM" : "PM")
+    }
+
+    private var todoRow: some View {
+        let c = todos.counts(now: Date())
+        let summary = c.left > 0 ? "\(c.left) left today" : (c.done > 0 ? "All done 🎉" : "Nothing yet")
+        return Button { onOpenTodos() } label: {
+            HStack {
+                Text("📝 To-dos")
+                Spacer()
+                Text(summary).foregroundStyle(.secondary)
+            }
+            .font(.system(.callout, design: .rounded, weight: .medium))
+            .padding(.vertical, 7).padding(.horizontal, 12)
+            .background(blush.opacity(0.3), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("To-dos, \(summary)")
     }
 
     @ViewBuilder private var controls: some View {

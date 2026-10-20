@@ -7,4 +7,5 @@ import MochiCore
     }
     runEngineChecks()
     runChatterChecks()
+    runTodoChecks()
 }

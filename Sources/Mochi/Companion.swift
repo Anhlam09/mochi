@@ -11,6 +11,11 @@ final class Companion {
     /// The line Mochi is saying right now, if any.
     private(set) var message: String?
 
+    /// A to-do line (reminder, check-in...). It outranks chatter and keeps the bubble until it expires or is tapped.
+    private(set) var todoLine: String?
+
+    @ObservationIgnored private var todoTap: (() -> Void)?
+    @ObservationIgnored private var todoClearTask: Task<Void, Never>?
     @ObservationIgnored private let engine: TimerEngine
     @ObservationIgnored private let settings: MochiSettings
     @ObservationIgnored private let defaults: UserDefaults
@@ -89,7 +94,35 @@ final class Companion {
         show(chatter.line(for: moment, at: Date()))
     }
 
+    /// Shows a to-do line. Random chatter can't overwrite it while it's up; tapping Mochi runs `onTap`.
+    /// `longer`: the line waits for a tap (check-in, wrap-up), so it stays up longer.
+    func sayTodo(_ text: String, longer: Bool, onTap: @escaping () -> Void) {
+        todoLine = text
+        todoTap = onTap
+        todoClearTask?.cancel()
+        todoClearTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(longer ? 20 : Self.showFor))
+            guard !Task.isCancelled else { return }
+            self?.clearTodoLine()
+        }
+    }
+
+    func clearTodoLine() {
+        todoClearTask?.cancel()
+        todoLine = nil
+        todoTap = nil
+    }
+
+    /// If a to-do line is showing, runs its tap action (and dismisses it). Returns whether it did.
+    func consumeTodoTap() -> Bool {
+        guard todoLine != nil, let tap = todoTap else { return false }
+        clearTodoLine()
+        tap()
+        return true
+    }
+
     private func show(_ line: String) {
+        guard todoLine == nil else { return }
         let now = Date()
         message = line
         scheduleNext(from: now)

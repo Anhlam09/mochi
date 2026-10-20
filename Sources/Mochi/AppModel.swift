@@ -10,6 +10,7 @@ final class AppModel {
 
     let engine: TimerEngine
     let settings: MochiSettings
+    let todos: TodoStore
     /// Attach panel / sound / notification reactions here.
     var eventHandlers: [@MainActor (EngineEvent) -> Void] = []
 
@@ -23,6 +24,8 @@ final class AppModel {
         )
         self.settings = settings
         self.engine = engine
+        // `MOCHI_TODO_FILE` points demos and tests at a throwaway list instead of the real one.
+        self.todos = env["MOCHI_TODO_FILE"].map { TodoStore(fileURL: URL(fileURLWithPath: $0)) } ?? TodoStore()
         engine.onEvent = { [weak self] event in
             self?.eventHandlers.forEach { $0(event) }
         }
@@ -46,10 +49,19 @@ final class AppModel {
         monitor.start()
         self.monitor = monitor
 
-        panel = FloatingPanelController(
-            rootView: MascotHost(engine: engine, settings: settings, companion: companion),
+        let coordinator = TodoCoordinator(store: todos, engine: engine, settings: settings,
+                                          companion: companion, nudger: nudger)
+        todoCoordinator = coordinator
+        eventHandlers.append { coordinator.handle($0) }
+
+        let panel = FloatingPanelController(
+            rootView: MascotHost(engine: engine, settings: settings, companion: companion,
+                                 todos: todos, todoCoordinator: coordinator),
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium
         )
+        self.panel = panel
+        coordinator.attach(panel: panel)
+        coordinator.start()
         trackMascotVisibility()
         trackMascotSize()
     }
@@ -58,6 +70,10 @@ final class AppModel {
     private var nudger: Nudger?
     private var monitor: SystemMonitor?
     private var panel: FloatingPanelController?
+    private var todoCoordinator: TodoCoordinator?
+
+    func openTodoCard() { todoCoordinator?.openCard() }
+    func toggleTodoCard() { todoCoordinator?.toggleCard() }
 
     /// Sets the size and resizes the panel in the same run-loop turn.
     func setMascotSize(_ size: MascotSize) {

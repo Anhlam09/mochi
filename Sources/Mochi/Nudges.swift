@@ -49,6 +49,17 @@ final class Nudger: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Timed to-do reminder. Local only; the body is the to-do's title and nothing else.
+    func postTodoReminder(id: UUID?, title: String, body: String) {
+        guard let center else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        let ident = "mochi.todo." + (id?.uuidString ?? UUID().uuidString)
+        center.add(UNNotificationRequest(identifier: ident, content: content, trigger: nil)) { _ in }
+        play("Glass")
+    }
+
     /// Clears the break-due notification whenever the phase is no longer breakDue
     /// (covers start, skip and snooze from the menu, the mascot or the notification).
     private func trackPhase() {

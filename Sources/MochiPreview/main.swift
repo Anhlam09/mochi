@@ -124,4 +124,8 @@ try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories
     print("Wrote PNGs to \(outDir.path)")
 }
 
+if CommandLine.arguments.contains("--todo") {
+    MainActor.assumeIsolated { _ = NSApplication.shared; renderTodoPreviews(into: outDir) }
+    exit(0)
+}
 MainActor.assumeIsolated { run() }

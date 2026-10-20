@@ -177,7 +177,7 @@ public struct MascotScene: View {
     }
 
     /// Spin progress where the colours swap (Mochi is edge-on, mid second turn).
-    public static let flavorSwapAt = 0.625
+    public nonisolated static let flavorSwapAt = 0.625
 
     private var hasBubble: Bool { !(bubbleText ?? "").isEmpty }
 
@@ -268,6 +268,10 @@ public struct MascotView: View {
     public var onHoverStart: (() -> Void)?
     /// Colour flavour; changing it plays a spin that swaps colours midway.
     public var flavor: MochiFlavor
+    /// Number of open to-dos; nil hides the to-do badge entirely, 0 shows it only on hover.
+    public var todoBadge: Int?
+    /// Called when the 📝 badge is tapped.
+    public var onTodoTap: (() -> Void)?
 
     @State private var spinCount = 0
     /// Flavour shown before the swap point of the current (or last) spin.
@@ -286,7 +290,10 @@ public struct MascotView: View {
     public init(pose: MascotPose, progress: Double, bubbleText: String?,
                 size: MascotSize = .medium, hoverText: String? = nil, calm: Bool = false,
                 flavor: MochiFlavor = .strawberry,
-                onTap: (() -> Void)? = nil, onHoverStart: (() -> Void)? = nil) {
+                onTap: (() -> Void)? = nil, onHoverStart: (() -> Void)? = nil,
+                todoBadge: Int? = nil, onTodoTap: (() -> Void)? = nil) {
+        self.todoBadge = todoBadge
+        self.onTodoTap = onTodoTap
         self.flavor = flavor
         self._spinFrom = State(initialValue: flavor)
         self.onHoverStart = onHoverStart
@@ -326,6 +333,7 @@ public struct MascotView: View {
                 }
             }
         }
+        .overlay(alignment: .topLeading) { badgeOverlay }
         .contentShape(HitShape(rects: hitRects))
         .onPreferenceChange(HitRectsKey.self) { rects in hitRects = rects }
         .onHover { inside in
@@ -348,6 +356,28 @@ public struct MascotView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// The badge sits at the mascot's upper-left (top-left coordinates of the window).
+    private var badgeRect: CGRect {
+        let win = MascotScene.size(for: size)
+        let d = TodoBadgeView.diameter * max(size.scale, 0.8)
+        let s = size.scale
+        let center = CGPoint(x: win.width / 2 - 62 * s, y: win.height - 116 * s)
+        return CGRect(x: center.x - d / 2, y: center.y - d / 2, width: d, height: d)
+    }
+
+    @ViewBuilder
+    private var badgeOverlay: some View {
+        if let todoBadge {
+            let visible = todoBadge > 0 || hover
+            let r = badgeRect
+            TodoBadgeView(count: todoBadge, scale: max(size.scale, 0.8), visible: visible) { onTodoTap?() }
+                .frame(width: r.width, height: r.height)
+                .offset(x: r.minX, y: r.minY)
+                .preference(key: HitRectsKey.self, value: visible ? [r.insetBy(dx: -3, dy: -3)] : [])
+                .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: visible)
+        }
     }
 
     private var accessibilityText: String {

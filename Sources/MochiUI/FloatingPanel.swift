@@ -104,6 +104,35 @@ public final class FloatingPanelController {
 
     public var isVisible: Bool { panel.isVisible }
 
+    /// True if `window` is this mascot panel (compared by identity).
+    public func isMascotWindow(_ window: NSWindow?) -> Bool { window != nil && window === panel }
+
+    /// The panel's frame in screen coordinates (includes transparent margins).
+    public var frame: NSRect { panel.frame }
+
+    /// The visible mascot (body + sprout) in screen coordinates; the transparent margins are excluded.
+    public var figureFrame: NSRect {
+        let f = panel.frame, s = size.scale
+        let w = 128 * s, h = 132 * s
+        return NSRect(x: f.midX - w / 2, y: f.minY + 12 * s, width: w, height: h)
+    }
+
+    /// Calls `handler` whenever the panel moves or resizes (e.g. the user drags Mochi).
+    /// Keep the returned token; pass it to `removeFrameObserver` when done.
+    public func observeFrameChanges(_ handler: @escaping @MainActor () -> Void) -> NSObjectProtocol {
+        let nc = NotificationCenter.default
+        let tokens = [NSWindow.didMoveNotification, NSWindow.didResizeNotification].map { name in
+            nc.addObserver(forName: name, object: panel, queue: .main) { _ in
+                MainActor.assumeIsolated { handler() }
+            }
+        }
+        return FrameObserverToken(tokens)
+    }
+
+    public func removeFrameObserver(_ token: NSObjectProtocol) {
+        (token as? FrameObserverToken)?.tokens.forEach { NotificationCenter.default.removeObserver($0) }
+    }
+
     public init<V: View>(rootView: V, size: MascotSize = .medium) {
         let panel = MochiPanel(contentRect: NSRect(origin: .zero, size: Self.panelSize(for: size)))
         self.panel = panel
@@ -241,6 +270,11 @@ public final class FloatingPanelController {
         o.y = min(max(o.y, area.minY), max(area.minY, area.maxY - frame.height))
         if o != frame.origin { panel.setFrameOrigin(o) }
     }
+}
+
+private final class FrameObserverToken: NSObject, @unchecked Sendable {
+    let tokens: [NSObjectProtocol]
+    init(_ tokens: [NSObjectProtocol]) { self.tokens = tokens }
 }
 
 private extension NSRect {
