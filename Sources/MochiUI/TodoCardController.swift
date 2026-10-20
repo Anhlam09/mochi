@@ -230,7 +230,7 @@ public final class TodoCardController {
         if panel.frame != outer { panel.setFrame(outer, display: true) }
     }
 
-    /// Left of the mascot if there's room, else right, else above; vertically centred on the mascot
+    /// Right of the mascot if there's room (top-aligned with the figure), else left, else above
     /// and clamped to the visible area of its screen.
     private func placement(for size: CGSize) -> Placement {
         let fig = anchor.figureFrame
@@ -246,10 +246,11 @@ public final class TodoCardController {
         var pop: UnitPoint
         let leftX = fig.minX - Self.gap - size.width
         let rightX = fig.maxX + Self.gap
-        if leftX >= vis.minX + e {
-            x = leftX; y = fig.midY - size.height / 2; pop = .trailing
-        } else if rightX + size.width <= vis.maxX - e {
-            x = rightX; y = fig.midY - size.height / 2; pop = .leading
+        // Preferred: right of Mochi, top edge level with the top of the figure.
+        if rightX + size.width <= vis.maxX - e {
+            x = rightX; y = fig.maxY - size.height; pop = .topLeading
+        } else if leftX >= vis.minX + e {
+            x = leftX; y = fig.maxY - size.height; pop = .topTrailing
         } else {
             x = fig.midX - size.width / 2; y = fig.maxY + Self.gap; pop = .bottom
         }
