@@ -201,7 +201,7 @@ struct ListTodosTool: Tool {
 struct AddTodoTool: Tool {
     let tools: AgentTools
     var name: String { "addTodo" }
-    var description: String { "Adds a to-do. Keep any day or time in the text, e.g. 'call mom at 3pm' or 'report tomorrow'." }
+    var description: String { "Adds a to-do. Keep any day or time in the text, e.g. 'go for a walk at 3pm' or 'report tomorrow'." }
     typealias Arguments = TextArgument
     func call(arguments: Arguments) async throws -> String { await tools.addTodo(arguments.text) }
 }
@@ -251,7 +251,7 @@ struct TextArgument: Generable {
     init(_ content: GeneratedContent) throws { text = try content.value(String.self, forProperty: "text") }
     var generatedContent: GeneratedContent { GeneratedContent(properties: ["text": text]) }
     static var generationSchema: GenerationSchema {
-        GenerationSchema(type: TextArgument.self, description: "A to-do with its day or time, e.g. 'call mom at 3pm'",
+        GenerationSchema(type: TextArgument.self, description: "A to-do with its day or time, e.g. 'go for a walk at 3pm'",
                          properties: [GenerationSchema.Property(name: "text", description: "The to-do text", type: String.self)])
     }
 }

@@ -177,7 +177,7 @@ public struct TodoCardView: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Palette.blush)
             TextField("", text: $text,
-                      prompt: Text("Add a to-do… try 'call mom 3pm'")
+                      prompt: Text("Add a to-do… try 'go for a walkie 3pm'")
                         .foregroundStyle(Palette.text.opacity(0.4)))
                 .textFieldStyle(.plain)
                 .font(.mochi(15, .medium))
