@@ -7,6 +7,7 @@ import MochiUI
 /// controls such as the text field draw correctly. Run: `swift run MochiPreview <dir> --todo`.
 @MainActor
 func renderTodoPreviews(into dir: URL) {
+    if ProcessInfo.processInfo.environment["MOCHI_LOOPTEST"] == "1" { runResizeLoopTest(); return }
     let cal = Calendar.current
     let now = Date()
     let today = cal.startOfDay(for: now)
@@ -123,4 +124,55 @@ private func snapshot<V: View>(_ view: V, name: String, dark: Bool, dir: URL, pa
     hosting.cacheDisplay(in: hosting.bounds, to: rep)
     guard let png = rep.representation(using: .png, properties: [:]) else { print("FAILED \(name)"); return }
     try? png.write(to: dir.appendingPathComponent(name + ".png"))
+}
+
+// MARK: - Resize-loop harness (`MOCHI_LOOPTEST=1 swift run MochiPreview <dir> --todo`)
+
+private final class ResizeCounter: @unchecked Sendable { var count = 0 }
+
+@MainActor @Observable
+private final class LoopModel {
+    var tick = 0
+    var week: [TodoWeekDay] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        return (0..<7).map { i in
+            let d = cal.date(byAdding: .day, value: i, to: today)!
+            let n = i % 2 == 0 ? 3 + (tick % 3) : 0
+            let its = (0..<n).map { TodoItem(title: "Task \(i)-\($0) with a fairly long title that wraps to two lines", day: d) }
+            return TodoWeekDay(date: d, items: its, openCount: n, isToday: i == 0)
+        }
+    }
+}
+
+@MainActor
+func runResizeLoopTest() {
+    _ = NSApplication.shared
+    NSApp.setActivationPolicy(.accessory)
+    let model = LoopModel()
+    let anchor = FloatingPanelController(rootView: Color.clear, size: .tiny)
+    anchor.show()
+    // Put Mochi mid-screen (like the user's report) so the card is placed away from the screen edges.
+    if let a = NSApp.windows.first(where: { $0.frame == anchor.frame }), let scr = NSScreen.main {
+        a.setFrameOrigin(NSPoint(x: scr.visibleFrame.maxX - a.frame.width - 24, y: scr.visibleFrame.midY - 40))
+    }
+    let controller = TodoCardController(anchor: anchor)
+    let counter = ResizeCounter()
+    let tok = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: nil, queue: .main) { n in
+        if let w = n.object, String(describing: type(of: w)).contains("TodoCardPanel") { counter.count += 1 }
+    }
+    let actions = TodoCardActions(add: { _ in }, toggle: { _ in }, delete: { _ in },
+                                  moveUnfinishedToTomorrow: {}, close: {}, addOnDay: { _, _ in })
+    controller.show(items: { model.week[0].items }, now: { Date() }, showMoveToTomorrow: { true },
+                    week: { model.week }, actions: actions)
+    let start = Date()
+    var ticks = 0
+    while Date().timeIntervalSince(start) < 2.5 {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        if Date().timeIntervalSince(start) > 0.5 + Double(ticks) * 0.12, ticks < 8 { model.tick += 1; ticks += 1 }
+        if ticks == 2 { NSApp.windows.first { $0.frame == anchor.frame }?.setFrameOrigin(NSPoint(x: 400, y: 120)) }
+    }
+    NotificationCenter.default.removeObserver(tok)
+    print("card panel resizes in 2.5s: \(counter.count)")
+    controller.hide()
 }

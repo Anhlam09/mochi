@@ -52,12 +52,17 @@ private struct TodoCardRoot: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        // The card is measured with an unconstrained height (`fixedSize`) and pinned to the top-left,
+        // so its reported size comes from its content only and never from the panel's current size.
+        // Resizing the panel therefore cannot change the measurement (no feedback loop).
         TodoCardView(items: items(), later: later(), now: now(), actions: actions,
                      showMoveToTomorrow: showMoveToTomorrow(), notice: notice(), ask: ask(), week: week())
+            .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGSize.self, of: { $0.size }) { onSize($0) }
             .scaleEffect(shown || reduceMotion ? 1 : 0.86, anchor: popAnchor)
             .opacity(shown ? 1 : 0)
             .padding(TodoCardController.shadowPad)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .onAppear {
                 withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.38, dampingFraction: 0.62)) {
                     shown = true
