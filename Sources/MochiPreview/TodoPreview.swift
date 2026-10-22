@@ -56,6 +56,15 @@ func renderTodoPreviews(into dir: URL) {
                      name: "todo_ask_\(n)_\(mode)", dark: dark, dir: dir)
         }
 
+        let sizesSheet = HStack(alignment: .bottom, spacing: 0) {
+            MascotView(pose: .breakDue, progress: 0.7, bubbleText: "Time to stretch! 🌱", size: .tiny, todoBadge: 3, onTodoTap: {})
+            MascotView(pose: .idle, progress: 0.3, bubbleText: nil, size: .tiny, todoBadge: 12, onTodoTap: {})
+            MascotView(pose: .breakDue, progress: 0.7, bubbleText: nil, size: .small, todoBadge: 3, onTodoTap: {})
+            MascotView(pose: .breakDue, progress: 0.7, bubbleText: "Time to stretch! 🌱", size: .medium, todoBadge: 3, onTodoTap: {})
+            MascotView(pose: .idle, progress: 0.3, bubbleText: nil, size: .large, todoBadge: 5, onTodoTap: {})
+        }
+        snapshot(sizesSheet, name: "mascot_badge_sizes_\(mode)", dark: dark, dir: dir, pad: 8)
+
         let badges = HStack(spacing: 0) {
             ForEach([3, 12, 0], id: \.self) { n in
                 MascotView(pose: .idle, progress: 0.3, bubbleText: n == 12 ? "You have 12 to-dos 🌱" : nil,

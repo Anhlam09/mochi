@@ -358,15 +358,22 @@ public struct MascotView: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    private static func badgeScale(_ size: MascotSize) -> Double { max(size.scale, 0.8) * 1.25 }
+    /// Badge scale: 1.5625x the figure scale (1.25 x 1.25), never below 1.2 so it stays an easy target at Tiny/Small.
+    private static func badgeScale(_ size: MascotSize) -> Double { max(size.scale * 1.5625, 1.2) }
 
-    /// The badge sits at the mascot's upper-left (top-left coordinates of the window).
+    /// The badge sits at the mascot's upper-right (top-left coordinates of the window).
     private var badgeRect: CGRect {
         let win = MascotScene.size(for: size)
         let d = TodoBadgeView.diameter * Self.badgeScale(size)
         let s = size.scale
-        let center = CGPoint(x: win.width / 2 - 62 * s, y: win.height - 116 * s)
+        let center = CGPoint(x: win.width / 2 + 62 * s + 4, y: win.height - 124 * s - 2)
         return CGRect(x: center.x - d / 2, y: center.y - d / 2, width: d, height: d)
+    }
+
+    /// Badge circle plus the count dot that overhangs its upper-right, with a little slop.
+    private func badgeHitRect(_ r: CGRect) -> CGRect {
+        let k = Self.badgeScale(size)
+        return CGRect(x: r.minX - 3, y: r.minY - 3 - 9 * k, width: r.width + 6 + 11 * k, height: r.height + 6 + 9 * k)
     }
 
     @ViewBuilder
@@ -377,7 +384,7 @@ public struct MascotView: View {
             TodoBadgeView(count: todoBadge, scale: Self.badgeScale(size), visible: visible) { onTodoTap?() }
                 .frame(width: r.width, height: r.height)
                 .offset(x: r.minX, y: r.minY)
-                .preference(key: HitRectsKey.self, value: visible ? [CGRect(x: r.minX - 3, y: r.minY - 3 - 10 * Self.badgeScale(size) / 1.25, width: r.width + 6 + 10 * Self.badgeScale(size), height: r.height + 6 + 10 * Self.badgeScale(size) / 1.25)] : [])
+                .preference(key: HitRectsKey.self, value: visible ? [badgeHitRect(r)] : [])
                 .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: visible)
         }
     }
