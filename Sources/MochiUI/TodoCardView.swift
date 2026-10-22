@@ -304,7 +304,7 @@ public struct TodoCardView: View {
                                       removal: .opacity))
     }
 
-    /// A heading per day for today + 6 days; empty days collapse to a slim "free" line.
+    /// A heading per day for today + 6 days; empty days collapse to a slim, muted date line.
     @ViewBuilder
     private var weekSections: some View {
         ForEach(week) { day in
@@ -624,7 +624,7 @@ private struct DayHeading: View {
         let wd = date.formatted(.dateTime.weekday(.abbreviated))
         let md = date.formatted(.dateTime.month(.abbreviated).day())
         let base = isToday ? "Today · \(wd) \(md)" : "\(wd) · \(md)"
-        return free ? base + " · free ✨" : base
+        return base
     }
 
     var body: some View {
@@ -642,7 +642,7 @@ private struct DayHeading: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
-        .accessibilityLabel((isToday ? "Today, " : "") + date.formatted(.dateTime.weekday(.wide).month(.wide).day()) + (free ? ", free" : ""))
+        .accessibilityLabel((isToday ? "Today, " : "") + date.formatted(.dateTime.weekday(.wide).month(.wide).day()) + (free ? ", nothing planned" : ""))
         .accessibilityHint("Add new to-dos to this day")
     }
 }
