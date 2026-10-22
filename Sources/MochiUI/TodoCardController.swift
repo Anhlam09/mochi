@@ -228,10 +228,29 @@ public final class TodoCardController {
         var popAnchor: UnitPoint
     }
 
+    /// Recent resize times, used to stop a layout feedback loop (resize -> new size -> resize…).
+    private var resizeTimes: [Date] = []
+    private var resizePending = false
+
     private func cardSizeChanged(_ size: CGSize) {
-        guard size.width > 0, size.height > 0, size != cardSize else { return }
-        cardSize = size
-        reposition()
+        let s = CGSize(width: size.width.rounded(), height: size.height.rounded())
+        guard s.width > 0, s.height > 0,
+              abs(s.width - cardSize.width) >= 1 || abs(s.height - cardSize.height) >= 1 else { return }
+        let now = Date()
+        resizeTimes = resizeTimes.filter { now.timeIntervalSince($0) < 1 } + [now]
+        // More than a dozen resizes in a second means the layout is chasing itself; stop
+        // following it so the app never freezes. The card keeps its last good size.
+        guard resizeTimes.count <= 12 else { return }
+        cardSize = s
+        // Resize on the next turn of the run loop, never in the middle of a layout pass.
+        guard !resizePending else { return }
+        resizePending = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                self?.resizePending = false
+                self?.reposition()
+            }
+        }
     }
 
     private func reposition() {
