@@ -53,6 +53,11 @@ final class AgentContext {
 
     func record(_ event: EngineEvent) { stats.record(event, now: Date()) }
 
+    /// Titles-free snapshot for the unprompted kind lines.
+    func countsSnapshot(now: Date = Date()) -> String {
+        AgentSnapshot.makeCounts(now: now, name: settings.friendName, items: store.items, stats: stats)
+    }
+
     func snapshot(now: Date = Date()) -> String {
         AgentSnapshot.make(now: now, name: settings.friendName, items: store.items, phase: engine.phase,
                            remaining: engine.remaining, stats: stats)
@@ -335,24 +340,38 @@ enum BrainSelfTest {
                 var cal = Calendar.autoupdatingCurrent
                 cal.timeZone = .current
                 func at(_ h: Int, _ m: Int) -> Date { cal.date(bySettingHour: h, minute: m, second: 0, of: Date())! }
-                var stats = TimerStats()
-                for e in [EngineEvent.breakDue, .breakStarted, .breakDue, .breakStarted, .breakDue] { stats.record(e, now: at(11, 0)) }
                 func item(_ t: String, done: Bool = false) -> TodoItem {
                     TodoItem(title: t, day: cal.startOfDay(for: Date()), done: done, doneAt: done ? Date() : nil)
                 }
-                func snap(_ now: Date, _ items: [TodoItem], _ st: TimerStats) -> String {
-                    AgentSnapshot.make(now: now, name: "Anh", items: items, phase: .idle, remaining: 0, stats: st)
+                func stats(_ focus: Int, _ breaks: Int, _ h: Int) -> TimerStats {
+                    var st = TimerStats()
+                    for _ in 0..<focus { st.record(.breakDue, now: at(h, 0)) }
+                    for _ in 0..<breaks { st.record(.breakStarted, now: at(h, 0)) }
+                    return st
                 }
-                let samples: [(String, PositivityMoment, Date, String)] = [
-                    ("morning", .morning, at(8, 0), snap(at(8, 0), [item("write the quarterly report"), item("buy milk")], TimerStats())),
-                    ("midday", .midday, at(12, 35), snap(at(12, 35), [item("buy milk"), item("write the quarterly report", done: true)], stats)),
-                    ("after a win", .win(.todoTicked), at(15, 20), snap(at(15, 20), [item("buy milk"), item("write the quarterly report", done: true)], stats)),
-                    ("all done", .win(.allDone), at(16, 10), snap(at(16, 10), [item("buy milk", done: true), item("write the quarterly report", done: true)], stats)),
+                func snap(_ h: Int, _ m: Int, done: Int, left: Int, focus: Int, breaks: Int) -> String {
+                    // Titles are deliberately secret-looking: they must never show up in a kind line.
+                    let items = (0..<done).map { item("SECRETDONE\($0)", done: true) } + (0..<left).map { item("SECRETOPEN\($0)") }
+                    return AgentSnapshot.makeCounts(now: at(h, m), name: "Anh", items: items, stats: stats(focus, breaks, h))
+                }
+                var samples: [(String, PositivityMoment, Date, String)] = [
+                    ("morning", .morning, at(8, 0), snap(8, 0, done: 0, left: 3, focus: 0, breaks: 0)),
+                    ("midday", .midday, at(12, 35), snap(12, 35, done: 1, left: 2, focus: 3, breaks: 2)),
+                    ("after a win", .win(.todoTicked), at(15, 20), snap(15, 20, done: 2, left: 1, focus: 4, breaks: 3)),
+                    ("all done", .win(.allDone), at(16, 10), snap(16, 10, done: 3, left: 0, focus: 5, breaks: 4)),
                 ]
+                let moments: [PositivityMoment] = [.hourly, .win(.focusFinished), .wrapUp, .win(.todoTicked), .midday, .morning]
+                for i in 1...4 {
+                    let h = Int.random(in: 7...20), m = Int.random(in: 0...59)
+                    let d = Int.random(in: 0...4), l = Int.random(in: 0...4)
+                    samples.append(("random \(i): \(h):\(String(format: "%02d", m)), \(d) done \(l) left", moments.randomElement()!, at(h, m),
+                                    snap(h, m, done: d, left: l, focus: Int.random(in: 0...6), breaks: Int.random(in: 0...5))))
+                }
                 for (label, moment, now, snapshot) in samples {
                     let line = await MochiBrain.positiveLine(snapshot: snapshot, moment: moment, now: now)
+                    let bad = line.map { $0.uppercased().contains("SECRET") || LineSanitizer.isTaskReminder($0) } ?? false
                     let ok = line.map { LineSanitizer.containsEmoji($0) && $0.count <= 100 } ?? false
-                    out("SELFTEST kind line (\(label)): \(line ?? "(fell back to a fixed cheer line)")  [\(ok ? "OK" : "CHECK")]")
+                    out("SELFTEST kind line (\(label)): \(line ?? "(fell back to a fixed cheer line)")  [\(bad ? "CHECK: task mention" : ok ? "OK" : "CHECK")]")
                 }
             }
             exit(0)

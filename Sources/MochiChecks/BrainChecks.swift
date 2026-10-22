@@ -50,6 +50,41 @@ import MochiCore
         let empty = AgentSnapshot.make(now: at(14, 9), calendar: cal, name: "", items: [], phase: .paused(remaining: 60, resume: .focusing), remaining: 60, stats: TimerStats())
         expect(empty.contains("(none)") && empty.contains("Timer: paused") && empty.contains("0 focus sessions finished, 0 breaks taken"))
     }
+    check("counts snapshot: numbers only, never a to-do title") {
+        let items = [item("Call mom secret-title", time: at(14, 15)), item("Email Sam", done: true), item("Dentist", day: 16)]
+        var stats = TimerStats()
+        stats.record(.breakDue, now: at(14, 11), calendar: cal)
+        let text = AgentSnapshot.makeCounts(now: at(14, 14, 5), calendar: cal, name: "Anh", items: items, stats: stats)
+        let expected = """
+        Now: Wednesday 14:05, afternoon
+        Friend's name: Anh
+        Focus sessions finished today: 1
+        Breaks taken today: 0
+        To-dos done today: 1
+        To-dos left today: 1
+        All to-dos done: no
+        """
+        expect(text == expected, "\n\(text)")
+        for title in ["Call mom", "secret", "Email", "Sam", "Dentist"] { expect(!text.contains(title), title) }
+        let all = AgentSnapshot.makeCounts(now: at(14, 14), calendar: cal, name: "", items: [item("x", done: true)], stats: TimerStats())
+        expect(all.contains("All to-dos done: yes") && !all.contains("Friend's name"))
+    }
+    check("kind lines: no task reminders, self-care is fine") {
+        expect(LineSanitizer.kindLine("Don't forget to call mom, Anh!", part: .morning) == nil)
+        expect(LineSanitizer.kindLine("Remember to send the report 🌱", part: .morning) == nil)
+        expect(LineSanitizer.kindLine("Make sure you finish the report ✨", part: .morning) == nil)
+        expect(LineSanitizer.kindLine("You should email Sam today.", part: .morning) == nil)
+        expect(LineSanitizer.kindLine("Don't forget to drink some water 💧", part: .morning) == "Don't forget to drink some water 💧")
+        expect(LineSanitizer.kindLine("Remember to stretch, Anh!", part: .afternoon) == "Remember to stretch, Anh! 🌤️")
+        expect(LineSanitizer.kindLine("2 sessions done, Anh! You're blooming 🌱", part: .morning) != nil)
+        // The fixed cheer pool has the self-care lines, and none of them is a task reminder.
+        for part in [DayPart.morning, .afternoon, .evening, .night] {
+            let cheers = Chatter.lines(for: .cheer, part: part, weekday: 3)
+            expect(cheers.contains("Don't forget to drink some water 💧") && cheers.contains("Blink slowly and look far away for a sec 🌤️"))
+            expect(cheers.contains("Little stretch break? Your shoulders will thank you 🌱"))
+            for l in cheers { expect(!LineSanitizer.isTaskReminder(l) , l) }
+        }
+    }
     check("timer stats reset each day") {
         var s = TimerStats()
         s.record(.breakDue, now: at(14, 10), calendar: cal)

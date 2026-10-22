@@ -89,7 +89,7 @@ final class PositivityCoordinator {
         }
         MochiBrain.prewarm()
         generating = true
-        let snapshot = context.snapshot()
+        let snapshot = context.countsSnapshot()
         Task { @MainActor [weak self] in
             defer { self?.generating = false }
             let line = await MochiBrain.positiveLine(snapshot: snapshot, moment: decision.moment, now: now)

@@ -275,6 +275,9 @@ private enum Lines {
 
     static let cheers = [
         "You're doing amazing, {name}! 🌟",
+        "Don't forget to drink some water 💧",
+        "Little stretch break? Your shoulders will thank you 🌱",
+        "Blink slowly and look far away for a sec 🌤️",
         "I'm really glad you're here 💕",
         "One small step at a time. You've got this 🌱",
         "Proud of you for showing up today ✨",

@@ -180,8 +180,20 @@ public enum LineSanitizer {
     }
 
     /// A kind line for the bubble: one line, on voice, always with an emoji for the time of day.
+    private static let reminderPhrases = ["don't forget", "do not forget", "remember to", "make sure", "you should",
+                                          "you need to", "you must", "you have to", "reminder"]
+    private static let selfCare = ["water", "drink", "hydrat", "stretch", "breathe", "breath", "rest", "eyes", "posture",
+                                   "snack", "walk", "blink", "shoulder", "sip", "eat", "smile"]
+
+    /// "Don't forget to call mom" style nudges are not wanted in kind words; self-care ones are fine.
+    public static func isTaskReminder(_ line: String) -> Bool {
+        let l = line.lowercased()
+        guard reminderPhrases.contains(where: { l.contains($0) }) else { return false }
+        return !selfCare.contains { l.contains($0) }
+    }
+
     public static func kindLine(_ raw: String, part: DayPart, maxLength: Int = 90) -> String? {
-        guard let line = oneLine(raw, maxLength: maxLength) else { return nil }
+        guard let line = oneLine(raw, maxLength: maxLength), !isTaskReminder(line) else { return nil }
         return containsEmoji(line) ? line : line + " " + emoji(for: part)
     }
 

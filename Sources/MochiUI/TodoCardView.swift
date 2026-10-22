@@ -28,9 +28,9 @@ public struct TodoCardActions {
 
 /// Mochi's to-do card: header, quick-add field, rows and an optional "move to tomorrow" pill.
 public struct TodoCardView: View {
-    public static let width: CGFloat = 308
-    /// The list scrolls once it grows past this height (card max is about 400pt).
-    static let maxListHeight: CGFloat = 207
+    public static let width: CGFloat = 332
+    /// The list scrolls once it grows past this height (card max is about 430pt).
+    static let maxListHeight: CGFloat = 224
 
     public var items: [TodoItem]
     /// To-dos for later days (shown in a collapsed "Later" section).
@@ -72,7 +72,7 @@ public struct TodoCardView: View {
     private var hasUnfinished: Bool { items.contains { !$0.done } }
 
     public var body: some View {
-        VStack(spacing: 11) {
+        VStack(spacing: 12) {
             if let notice, !notice.isEmpty { NoticeStrip(text: notice) }
             header
             if ask != nil { TabSwitch(tab: $tab) }
@@ -88,7 +88,7 @@ public struct TodoCardView: View {
                 }
             }
         }
-        .padding(15)
+        .padding(16)
         .frame(width: Self.width)
         .background(CardBackground())
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: items)
@@ -132,7 +132,7 @@ public struct TodoCardView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
             Text("Today 🌱")
-                .font(.mochi(19, .bold))
+                .font(.mochi(20, .bold))
                 .foregroundStyle(Palette.text)
             Spacer(minLength: 4)
             if !items.isEmpty && tab == .todos { progress }
@@ -161,7 +161,7 @@ public struct TodoCardView: View {
                         .opacity(doneCount == 0 ? 0 : 1)
                 }
             Text(doneCount == total ? "all done 🎉" : "\(doneCount) of \(total) done")
-                .font(.mochi(12, .medium))
+                .font(.mochi(13, .medium))
                 .foregroundStyle(Palette.text.opacity(0.6))
                 .fixedSize()
         }
@@ -180,7 +180,7 @@ public struct TodoCardView: View {
                       prompt: Text("Add a to-do… try 'call mom 3pm'")
                         .foregroundStyle(Palette.text.opacity(0.4)))
                 .textFieldStyle(.plain)
-                .font(.mochi(14, .medium))
+                .font(.mochi(15, .medium))
                 .foregroundStyle(Palette.text)
                 .focused($fieldFocused)
                 .onSubmit(submit)
@@ -223,7 +223,7 @@ public struct TodoCardView: View {
             }
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { listHeight = $0 }
         }
-        .frame(height: min(max(listHeight, 1), laterOpen ? Self.maxListHeight + 62 : Self.maxListHeight))
+        .frame(height: min(max(listHeight, 1), laterOpen ? Self.maxListHeight + 67 : Self.maxListHeight))
         .scrollBounceBehavior(.basedOnSize)
     }
 
@@ -234,7 +234,7 @@ public struct TodoCardView: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .bold))
                         .rotationEffect(.degrees(laterOpen ? 90 : 0))
-                    Text("Later (\(later.count))").font(.mochi(13))
+                    Text("Later (\(later.count))").font(.mochi(14))
                     Spacer(minLength: 0)
                 }
                 .foregroundStyle(Palette.text.opacity(0.6))
@@ -257,7 +257,7 @@ public struct TodoCardView: View {
     private var moveButton: some View {
         Button { actions.moveUnfinishedToTomorrow() } label: {
             Text("Move unfinished to tomorrow 🌙")
-                .font(.mochi(13))
+                .font(.mochi(14))
                 .foregroundStyle(Palette.text)
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
@@ -349,7 +349,7 @@ private struct TodoRow: View {
             TickBox(done: item.done) { actions.toggle(item.id) }
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
-                    .font(.mochi(14, .medium))
+                    .font(.mochi(15, .medium))
                     .foregroundStyle(Palette.text)
                     .strikethrough(item.done, color: Palette.text.opacity(0.5))
                     .lineLimit(2)
@@ -386,7 +386,7 @@ private struct TodoRow: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 7)
+        .padding(.vertical, 7.5)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(hover ? Palette.blush.opacity(0.12) : .clear)
@@ -423,7 +423,7 @@ private struct Chip: View {
             if let symbol {
                 Image(systemName: symbol).font(.system(size: 8, weight: .bold))
             }
-            Text(text).font(.mochi(11, .semibold))
+            Text(text).font(.mochi(12, .semibold))
         }
         .foregroundStyle(Palette.text.opacity(0.75))
         .padding(.horizontal, 7).padding(.vertical, 2)
@@ -463,7 +463,7 @@ private struct TickBox: View {
                         .opacity(burst > 0 ? Double(1 - burst) : 0)
                 }
             }
-            .frame(width: 22, height: 22)
+            .frame(width: 24, height: 24)
             .animation(reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.3, dampingFraction: 0.5), value: done)
             .contentShape(Circle())
         }
@@ -485,7 +485,7 @@ private struct NoticeStrip: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.mochi(12, .medium))
+            .font(.mochi(13, .medium))
             .foregroundStyle(Palette.text)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
@@ -523,7 +523,7 @@ private struct TabSwitch: View {
         let on = tab == value
         return Button { tab = value } label: {
             Text(title)
-                .font(.mochi(12, on ? .bold : .medium))
+                .font(.mochi(13, on ? .bold : .medium))
                 .foregroundStyle(Palette.text.opacity(on ? 1 : 0.6))
                 .frame(maxWidth: .infinity).frame(height: 26)
                 .background {
@@ -564,7 +564,7 @@ private struct AskTab: View {
                 if !state.actionsTaken.isEmpty { pills }
             }
             Text("🔒 Runs on your Mac, never sent anywhere")
-                .font(.mochi(11, .medium))
+                .font(.mochi(12, .medium))
                 .foregroundStyle(Palette.text.opacity(0.55))
                 .accessibilityLabel("Runs on your Mac, never sent anywhere")
         }
@@ -577,7 +577,7 @@ private struct AskTab: View {
                       prompt: Text("Ask me anything… try 'plan my afternoon'")
                         .foregroundStyle(Palette.text.opacity(0.4)))
                 .textFieldStyle(.plain)
-                .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                .font(.system(size: 12.5, weight: .medium, design: .rounded))
                 .foregroundStyle(Palette.text)
                 .focused(focused)
                 .onSubmit { send(text) }
@@ -599,7 +599,7 @@ private struct AskTab: View {
             ForEach(Self.suggestions, id: \.self) { s in
                 Button { send(s) } label: {
                     Text(s)
-                        .font(.mochi(12))
+                        .font(.mochi(13))
                         .foregroundStyle(Palette.text)
                         .lineLimit(1).minimumScaleFactor(0.85)
                         .frame(maxWidth: .infinity).frame(height: 28)
@@ -617,7 +617,7 @@ private struct AskTab: View {
         HStack(spacing: 8) {
             MiniFace()
             if reduceMotion {
-                Text("thinking…").font(.mochi(12, .medium)).foregroundStyle(Palette.text.opacity(0.65))
+                Text("thinking…").font(.mochi(13, .medium)).foregroundStyle(Palette.text.opacity(0.65))
             } else {
                 TimelineView(.animation) { ctx in
                     let t = ctx.date.timeIntervalSinceReferenceDate
@@ -641,14 +641,14 @@ private struct AskTab: View {
     private func replyBubble(_ reply: String) -> some View {
         ScrollView(.vertical, showsIndicators: false) {
             Text(reply)
-                .font(.mochi(14, .medium))
+                .font(.mochi(15, .medium))
                 .foregroundStyle(Palette.text)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { replyHeight = $0 }
         }
-        .frame(height: min(max(replyHeight, 1), 124))
+        .frame(height: min(max(replyHeight, 1), 134))
         .padding(.horizontal, 12).padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.fieldFill)
@@ -663,7 +663,7 @@ private struct AskTab: View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(Array(state.actionsTaken.enumerated()), id: \.offset) { _, a in
                 Text(a)
-                    .font(.mochi(12, .medium))
+                    .font(.mochi(13, .medium))
                     .foregroundStyle(Palette.text)
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 10).padding(.vertical, 4)
@@ -724,10 +724,10 @@ private struct EmptyTodoState: View {
                     Ellipse().fill(Palette.blush.opacity(0.6)).frame(width: 7, height: 4.5)
                 }.offset(y: 4)
                 Text("z")
-                    .font(.mochi(12, .bold)).foregroundStyle(Palette.focusRing)
+                    .font(.mochi(13, .bold)).foregroundStyle(Palette.focusRing)
                     .offset(x: 30, y: float ? -20 : -14)
                 Text("z")
-                    .font(.mochi(9, .bold)).foregroundStyle(Palette.focusRing.opacity(0.7))
+                    .font(.mochi(10, .bold)).foregroundStyle(Palette.focusRing.opacity(0.7))
                     .offset(x: 38, y: float ? -28 : -23)
             }
             .frame(height: 56)
@@ -735,7 +735,7 @@ private struct EmptyTodoState: View {
             Text(text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 6)
-                .font(.mochi(13, .medium))
+                .font(.mochi(14, .medium))
                 .foregroundStyle(Palette.text.opacity(0.6))
                 .padding(.bottom, 8)
         }

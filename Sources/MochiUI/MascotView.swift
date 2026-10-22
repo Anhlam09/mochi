@@ -358,10 +358,12 @@ public struct MascotView: View {
         .accessibilityAddTraits(.isButton)
     }
 
+    private static func badgeScale(_ size: MascotSize) -> Double { max(size.scale, 0.8) * 1.25 }
+
     /// The badge sits at the mascot's upper-left (top-left coordinates of the window).
     private var badgeRect: CGRect {
         let win = MascotScene.size(for: size)
-        let d = TodoBadgeView.diameter * max(size.scale, 0.8)
+        let d = TodoBadgeView.diameter * Self.badgeScale(size)
         let s = size.scale
         let center = CGPoint(x: win.width / 2 - 62 * s, y: win.height - 116 * s)
         return CGRect(x: center.x - d / 2, y: center.y - d / 2, width: d, height: d)
@@ -372,10 +374,10 @@ public struct MascotView: View {
         if let todoBadge {
             let visible = todoBadge > 0 || hover
             let r = badgeRect
-            TodoBadgeView(count: todoBadge, scale: max(size.scale, 0.8), visible: visible) { onTodoTap?() }
+            TodoBadgeView(count: todoBadge, scale: Self.badgeScale(size), visible: visible) { onTodoTap?() }
                 .frame(width: r.width, height: r.height)
                 .offset(x: r.minX, y: r.minY)
-                .preference(key: HitRectsKey.self, value: visible ? [r.insetBy(dx: -3, dy: -3)] : [])
+                .preference(key: HitRectsKey.self, value: visible ? [CGRect(x: r.minX - 3, y: r.minY - 3 - 10 * Self.badgeScale(size) / 1.25, width: r.width + 6 + 10 * Self.badgeScale(size), height: r.height + 6 + 10 * Self.badgeScale(size) / 1.25)] : [])
                 .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: visible)
         }
     }

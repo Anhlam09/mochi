@@ -73,6 +73,23 @@ public enum AgentSnapshot {
         return lines.joined(separator: "\n")
     }
 
+    /// A titles-free snapshot for kind words: only the time, day part, name and counts. To-do titles
+    /// never reach the model that writes unprompted lines.
+    public static func makeCounts(now: Date, calendar: Calendar = .autoupdatingCurrent, name: String, items: [TodoItem],
+                                  stats: TimerStats) -> String {
+        var lines = ["Now: \(weekday(now, calendar)) \(clock(now, calendar)), \(partName(DayPart(hour: calendar.component(.hour, from: now))))"]
+        let cleanName = clip(name, maxNameLength)
+        if !cleanName.isEmpty { lines.append("Friend's name: \(cleanName)") }
+        let s = stats.today(now: now, calendar: calendar)
+        lines.append("Focus sessions finished today: \(s.focus)")
+        lines.append("Breaks taken today: \(s.breaks)")
+        let c = TodoList.counts(items, now: now, calendar: calendar)
+        lines.append("To-dos done today: \(c.done)")
+        lines.append("To-dos left today: \(c.left)")
+        lines.append("All to-dos done: \(c.left == 0 && c.done > 0 ? "yes" : "no")")
+        return lines.joined(separator: "\n")
+    }
+
     /// One line, no control characters, at most `max` characters.
     static func clip(_ s: String, _ max: Int) -> String {
         let flat = s.unicodeScalars.map { CharacterSet.controlCharacters.contains($0) || CharacterSet.newlines.contains($0) ? " " : String($0) }
