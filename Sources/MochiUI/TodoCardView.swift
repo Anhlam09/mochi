@@ -574,7 +574,7 @@ private struct AskTab: View {
         HStack(spacing: 7) {
             Text("✨").font(.system(size: 11))
             TextField("", text: $text,
-                      prompt: Text("Ask me anything… try 'plan my afternoon'")
+                      prompt: Text("Ask me anything… try 'what's next?'")
                         .foregroundStyle(Palette.text.opacity(0.4)))
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5, weight: .medium, design: .rounded))
