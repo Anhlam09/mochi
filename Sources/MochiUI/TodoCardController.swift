@@ -42,6 +42,7 @@ private struct TodoCardRoot: View {
     let later: () -> [TodoItem]
     let notice: () -> String?
     let ask: () -> AskMochiState?
+    let week: () -> [TodoWeekDay]
     let now: () -> Date
     let showMoveToTomorrow: () -> Bool
     let actions: TodoCardActions
@@ -52,7 +53,7 @@ private struct TodoCardRoot: View {
 
     var body: some View {
         TodoCardView(items: items(), later: later(), now: now(), actions: actions,
-                     showMoveToTomorrow: showMoveToTomorrow(), notice: notice(), ask: ask())
+                     showMoveToTomorrow: showMoveToTomorrow(), notice: notice(), ask: ask(), week: week())
             .onGeometryChange(for: CGSize.self, of: { $0.size }) { onSize($0) }
             .scaleEffect(shown || reduceMotion ? 1 : 0.86, anchor: popAnchor)
             .opacity(shown ? 1 : 0)
@@ -95,6 +96,7 @@ public final class TodoCardController {
                      showMoveToTomorrow: @escaping () -> Bool,
                      notice: @escaping () -> String? = { nil },
                      ask: @escaping () -> AskMochiState? = { nil },
+                     week: @escaping () -> [TodoWeekDay] = { [] },
                      actions: TodoCardActions) {
         if isVisible { return }
         generation += 1
@@ -105,7 +107,7 @@ public final class TodoCardController {
 
         let side = placement(for: cardSize)
         let panel = TodoCardPanel(contentRect: .zero)
-        let root = TodoCardRoot(items: items, later: later, notice: notice, ask: ask, now: now, showMoveToTomorrow: showMoveToTomorrow,
+        let root = TodoCardRoot(items: items, later: later, notice: notice, ask: ask, week: week, now: now, showMoveToTomorrow: showMoveToTomorrow,
                                 actions: wrapped, popAnchor: side.popAnchor) { [weak self] size in
             MainActor.assumeIsolated { self?.cardSizeChanged(size) }
         }
@@ -133,12 +135,13 @@ public final class TodoCardController {
                        showMoveToTomorrow: @escaping () -> Bool,
                        notice: @escaping () -> String? = { nil },
                        ask: @escaping () -> AskMochiState? = { nil },
+                       week: @escaping () -> [TodoWeekDay] = { [] },
                        actions: TodoCardActions) {
         if isVisible {
             hide()
         } else {
             show(items: items, later: later, now: now, showMoveToTomorrow: showMoveToTomorrow,
-                 notice: notice, ask: ask, actions: actions)
+                 notice: notice, ask: ask, week: week, actions: actions)
         }
     }
 

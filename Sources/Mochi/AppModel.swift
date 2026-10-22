@@ -68,7 +68,6 @@ final class AppModel {
         self.panel = panel
         coordinator.attach(panel: panel)
         coordinator.start()
-        if env["MOCHI_BRAIN_SELFTEST"] == "1" { BrainSelfTest.run(context: context) }
         trackMascotVisibility()
         trackMascotSize()
     }

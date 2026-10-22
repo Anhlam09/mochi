@@ -163,6 +163,7 @@ final class TodoCoordinator {
                   showMoveToTomorrow: { [weak self] in self?.shouldOfferMoveToTomorrow ?? false },
                   notice: { [weak self] in self?.notice },
                   ask: { [weak self] in self?.askState },
+                  week: { [store] in store.week(now: Date()) },
                   actions: actions)
     }
 

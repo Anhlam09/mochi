@@ -269,7 +269,7 @@ public enum AskReply {
     }
 
     private static let offers = ["how else can i", "anything else", "let me know", "feel free", "need any more", "if you need",
-                                 "happy to help", "here to help", "i'm here if", "more assistance", "would you like me to"]
+                                 "happy to help", "here to help", "i'm here if", "more assistance", "would you like me to", "make sure to", "prioritize your"]
 
     /// Drops trailing "can I help with anything else?" filler (never the only sentence).
     static func dropOffers(_ text: String) -> String {
@@ -285,10 +285,31 @@ public enum AskReply {
     }
 
     /// `actionsTaken` is what the tools really did; a reply may never claim more than that.
-    public static func finalize(_ raw: String, userText: String, name: String, actionsTaken: [String]) -> String {
-        guard var text = LineSanitizer.reply(raw), !LineSanitizer.hasBannedPhrase(text),
+    private static let clockTime = try! NSRegularExpression(pattern: #"\b\d{1,2}:\d{2}\b"#)
+
+    /// Drops sentences that mention a clock time the snapshot never gave (the model sometimes invents them).
+    static func dropInventedTimes(_ text: String, snapshot: String) -> String {
+        func times(_ s: String) -> Set<String> {
+            Set(clockTime.matches(in: s, range: NSRange(location: 0, length: (s as NSString).length)).map { (s as NSString).substring(with: $0.range) })
+        }
+        let known = times(snapshot)
+        let ends = LineSanitizer.sentenceEnds(text)
+        guard !ends.isEmpty else { return text }
+        var sentences: [String] = []
+        var start = text.startIndex
+        for e in ends { sentences.append(String(text[start..<e]).trimmingCharacters(in: .whitespaces)); start = e }
+        let rest = String(text[start...]).trimmingCharacters(in: .whitespaces)
+        if !rest.isEmpty { sentences.append(rest) }
+        let kept = sentences.filter { times($0).isSubset(of: known) }
+        return kept.isEmpty ? text : kept.joined(separator: " ")
+    }
+
+    public static func finalize(_ raw: String, userText: String, name: String, actionsTaken: [String], snapshot: String? = nil) -> String {
+        guard var text = LineSanitizer.reply(raw, maxSentences: userText.lowercased().contains("week") ? 4 : 3),
+              !LineSanitizer.hasBannedPhrase(text),
               !text.contains("[") else { return hiccup }   // an unfilled placeholder from the examples
         text = dropOffers(text)
+        if let snapshot { text = dropInventedTimes(text, snapshot: snapshot) }
         if !startsWithGreeting(userText) { text = stripGreeting(text, name: name) }
         if actionsTaken.isEmpty, claimsAction(text) { return couldNotDo }
         return text

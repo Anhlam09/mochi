@@ -65,6 +65,23 @@ func renderTodoPreviews(into dir: URL) {
         }
         snapshot(sizesSheet, name: "mascot_badge_sizes_\(mode)", dark: dark, dir: dir, pad: 8)
 
+        let weekDays: [TodoWeekDay] = (0..<7).map { i in
+            let d = cal.date(byAdding: .day, value: i, to: today)!
+            let its: [TodoItem] = i == 0 ? [items[1], items[3]]
+                : i == 3 ? [TodoItem(title: "Dentist appointment", day: d, time: at3pm),
+                            TodoItem(title: "Pick up the parcel", day: d)]
+                : i == 5 ? [TodoItem(title: "Plan the birthday picnic", day: d)] : []
+            return TodoWeekDay(date: d, items: its, openCount: its.filter { !$0.done }.count, isToday: i == 0)
+        }
+        snapshot(TodoCardView(items: weekDays[0].items, now: now, actions: actions, showMoveToTomorrow: true,
+                              ask: AskMochiState(), week: weekDays),
+                 name: "todo_week_list_\(mode)", dark: dark, dir: dir)
+        let emptyToday = weekDays.enumerated().map { i, d in
+            i == 0 ? TodoWeekDay(date: d.date, items: [], openCount: 0, isToday: true) : d
+        }
+        snapshot(TodoCardView(items: [], now: now, actions: actions, showMoveToTomorrow: false, week: emptyToday),
+                 name: "todo_week_today_empty_\(mode)", dark: dark, dir: dir)
+
         let badges = HStack(spacing: 0) {
             ForEach([3, 12, 0], id: \.self) { n in
                 MascotView(pose: .idle, progress: 0.3, bubbleText: n == 12 ? "You have 12 to-dos 🌱" : nil,

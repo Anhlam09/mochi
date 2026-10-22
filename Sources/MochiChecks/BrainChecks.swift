@@ -25,14 +25,27 @@ import MochiCore
         Friend's name: Anh
         Timer: focusing, 25 min left
         Today so far: 2 focus sessions finished, 1 break taken
-        To-dos today (2 open, 1 done):
+        Today (2 open, 1 done):
         - [ ] Old thing (Mon)
         - [ ] Call mom (15:00)
         - [x] Email Sam
-        Later:
-        - [ ] Dentist (Fri 10:00)
+        Thu Oct 15 (free):
+        (nothing)
+        Fri Oct 16 (1 open to-do):
+        - [ ] Dentist (10:00)
+        Sat Oct 17 (free):
+        (nothing)
+        Sun Oct 18 (free):
+        (nothing)
+        Mon Oct 19 (free):
+        (nothing)
+        Tue Oct 20 (free):
+        (nothing)
         """
         expect(text == expected, "\n\(text)")
+        let beyond = AgentSnapshot.make(now: at(14, 14, 5), calendar: cal, name: "", items: [item("Far away", day: 25, time: at(25, 9))],
+                                        phase: .idle, remaining: 0, stats: TimerStats())
+        expect(beyond.hasSuffix("Later:\n- [ ] Far away (Oct 25 09:00)"), "beyond the week is listed under Later:\n\(beyond)")
         expect(!text.contains(secret.uuidString) && !text.contains("2026") && !text.contains("/"), "no ids, dates or paths")
     }
     check("snapshot: limits, clipping and hostile titles stay inert") {
@@ -84,6 +97,22 @@ import MochiCore
             expect(cheers.contains("Little stretch break? Your shoulders will thank you 🌱"))
             for l in cheers { expect(!LineSanitizer.isTaskReminder(l) , l) }
         }
+    }
+    check("week facts: busiest and free days, no titles") {
+        let items = [item("Secret A", day: 16), item("Secret B", day: 16), item("Secret C", day: 18)]
+        let f = AgentSnapshot.weekFacts(now: at(14, 9), calendar: cal, items: items)
+        expect(f == "Busiest day: Fri Oct 16 with 2 open to-dos. Free days: Wed Oct 14, Thu Oct 15, Sat Oct 17, Mon Oct 19, Tue Oct 20.", f)
+        expect(!f.contains("Secret"))
+        expect(AgentSnapshot.weekFacts(now: at(14, 9), calendar: cal, items: []) .hasPrefix("The whole week is free."))
+    }
+    check("week summary: accurate, warm, no titles") {
+        let items = [item("Secret A", day: 16), item("Secret B", day: 16), item("Secret C", day: 18)]
+        let t = AgentSnapshot.weekSummary(now: at(14, 9), calendar: cal, items: items)
+        expect(t == "Friday (Oct 16) is your busiest day with 2 open to-dos. Thursday (Oct 15) is free, a lovely day to rest. A gentle week, you've got this 🌱", t)
+        expect(!t.contains("Secret"))
+        expect(AgentSnapshot.weekSummary(now: at(14, 9), calendar: cal, items: []).hasPrefix("Your week is wide open"))
+        let one = AgentSnapshot.weekSummary(now: at(14, 9), calendar: cal, items: [item("x", day: 14)])
+        expect(one.hasPrefix("Today is your busiest day with 1 open to-do."), one)
     }
     check("timer stats reset each day") {
         var s = TimerStats()
@@ -200,6 +229,9 @@ import MochiCore
         expect(fin("I've added 'call mom' at 3pm. How else can I help you today?", "remind me", ["Added"]) == "I've added 'call mom' at 3pm.", "filler offers dropped")
         expect(fin("Let me know if you need anything.", "hi") == "Let me know if you need anything.", "never drops the only sentence")
         expect(fin("I'm programmed to be helpful.", "tell me a secret") == AskReply.hiccup)
+        let snap = "Today (1 open, 0 done):\n- [ ] Standup (10:00)"
+        expect(AskReply.finalize("Start with standup at 10:00. Then focus from 11:00 to 12:00. Rest after.", userText: "plan my day", name: "Anh", actionsTaken: [], snapshot: snap) == "Start with standup at 10:00. Rest after.", "invented times dropped")
+        expect(AskReply.finalize("Then focus from 11:00 to 12:00.", userText: "plan my day", name: "Anh", actionsTaken: [], snapshot: snap) == "Then focus from 11:00 to 12:00.", "never leaves nothing")
         expect(!AskReply.claimsAction("You could add it later.") && !AskReply.claimsAction("Let's start with the report."))
     }
     check("positivity: peek never consumes, commit does") {

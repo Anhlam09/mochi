@@ -20,17 +20,37 @@ public enum TodoList {
         return carried + timed + rest + done
     }
 
-    /// Unfinished items for later days (day > today): by day, then timed items by time, then the rest.
-    public static func later(_ items: [TodoItem], now: Date, calendar: Calendar = .autoupdatingCurrent) -> [TodoItem] {
+    /// Seven days starting today. Today's items are the usual today list; other days show their open
+    /// items (timed first, then by creation) followed by the ones finished.
+    public static func week(_ items: [TodoItem], now: Date, calendar: Calendar = .autoupdatingCurrent) -> [TodoWeekDay] {
         let start = calendar.startOfDay(for: now)
-        return items.filter { !$0.done && $0.day > start }.sorted {
-            if $0.day != $1.day { return $0.day < $1.day }
-            switch ($0.time, $1.time) {
-            case let (a?, b?): return a < b
-            case (_?, nil): return true
-            case (nil, _?): return false
-            default: return $0.createdAt < $1.createdAt
+        return (0..<7).map { offset in
+            let day = calendar.date(byAdding: .day, value: offset, to: start)!
+            if offset == 0 {
+                let list = today(items, now: now, calendar: calendar)
+                return TodoWeekDay(date: day, items: list, openCount: list.filter { !$0.done }.count, isToday: true)
             }
+            let mine = items.filter { calendar.isDate($0.day, inSameDayAs: day) }
+            let open = mine.filter { !$0.done }.sorted(by: openOrder)
+            let done = mine.filter(\.done).sorted { ($0.doneAt ?? $0.day) < ($1.doneAt ?? $1.day) }
+            return TodoWeekDay(date: day, items: open + done, openCount: open.count, isToday: false)
+        }
+    }
+
+    private static func openOrder(_ a: TodoItem, _ b: TodoItem) -> Bool {
+        switch (a.time, b.time) {
+        case let (x?, y?): return x != y ? x < y : a.createdAt < b.createdAt
+        case (_?, nil): return true
+        case (nil, _?): return false
+        default: return a.createdAt < b.createdAt
+        }
+    }
+
+    /// Unfinished items beyond the week strip (7 or more days from today): by day, then time, then creation.
+    public static func later(_ items: [TodoItem], now: Date, calendar: Calendar = .autoupdatingCurrent) -> [TodoItem] {
+        let end = calendar.date(byAdding: .day, value: 7, to: calendar.startOfDay(for: now))!
+        return items.filter { !$0.done && $0.day >= end }.sorted {
+            $0.day != $1.day ? $0.day < $1.day : openOrder($0, $1)
         }
     }
 
@@ -86,14 +106,16 @@ public final class TodoStore {
 
     public func todayList(now: Date) -> [TodoItem] { TodoList.today(items, now: now, calendar: calendar) }
     public func counts(now: Date) -> (done: Int, left: Int) { TodoList.counts(items, now: now, calendar: calendar) }
-    /// Unfinished items for days after today.
+    /// Today plus the next six days, ready for the card's day strip.
+    public func week(now: Date) -> [TodoWeekDay] { TodoList.week(items, now: now, calendar: calendar) }
+    /// Unfinished items beyond the week.
     public func laterList(now: Date) -> [TodoItem] { TodoList.later(items, now: now, calendar: calendar) }
 
     // MARK: Mutations
 
     @discardableResult
-    public func add(_ text: String, now: Date) -> TodoItem? {
-        guard let p = TodoParser.parse(text, now: now, calendar: calendar) else { return nil }
+    public func add(_ text: String, now: Date, defaultDay: Date? = nil) -> TodoItem? {
+        guard let p = TodoParser.parse(text, now: now, calendar: calendar, defaultDay: defaultDay) else { return nil }
         let item = TodoItem(title: p.title, day: p.day, time: p.time, createdAt: now)
         items.append(item)
         save()

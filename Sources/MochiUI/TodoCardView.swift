@@ -10,14 +10,18 @@ public struct TodoCardActions {
     public var close: @MainActor () -> Void
     /// Sends a question to Mochi's on-device brain (the "Ask Mochi" tab).
     public var ask: (@MainActor (String) -> Void)?
+    /// Adds a to-do on a chosen day (week strip). Falls back to `add` when nil.
+    public var addOnDay: (@MainActor (String, Date) -> Void)?
 
     public init(add: @escaping @MainActor (String) -> Void,
                 toggle: @escaping @MainActor (UUID) -> Void,
                 delete: @escaping @MainActor (UUID) -> Void,
                 moveUnfinishedToTomorrow: @escaping @MainActor () -> Void,
                 close: @escaping @MainActor () -> Void,
-                ask: (@MainActor (String) -> Void)? = nil) {
+                ask: (@MainActor (String) -> Void)? = nil,
+                addOnDay: (@MainActor (String, Date) -> Void)? = nil) {
         self.ask = ask
+        self.addOnDay = addOnDay
         self.add = add
         self.toggle = toggle
         self.delete = delete
@@ -39,6 +43,8 @@ public struct TodoCardView: View {
     public var notice: String?
     /// Non-nil adds the "Ask Mochi" tab.
     public var ask: AskMochiState?
+    /// Today + the next 6 days; non-empty shows the day strip.
+    public var week: [TodoWeekDay]
     public var now: Date
     public var actions: TodoCardActions
     public var showMoveToTomorrow: Bool
@@ -54,9 +60,10 @@ public struct TodoCardView: View {
     private let hasInitialTab: Bool
 
     public init(items: [TodoItem], later: [TodoItem] = [], now: Date, actions: TodoCardActions,
-                showMoveToTomorrow: Bool, notice: String? = nil, ask: AskMochiState? = nil, laterExpanded: Bool = false,
+                showMoveToTomorrow: Bool, notice: String? = nil, ask: AskMochiState? = nil, week: [TodoWeekDay] = [], laterExpanded: Bool = false,
                 initialTab: TodoCardTab? = nil) {
         self.ask = ask
+        self.week = week
         self._tab = State(initialValue: initialTab ?? .todos)
         self.hasInitialTab = initialTab != nil
         self._laterOpen = State(initialValue: laterExpanded)
@@ -68,8 +75,13 @@ public struct TodoCardView: View {
         self.notice = notice
     }
 
-    private var doneCount: Int { items.filter(\.done).count }
-    private var hasUnfinished: Bool { items.contains { !$0.done } }
+    private var weekMode: Bool { !week.isEmpty }
+    /// Today's to-dos (the plain `items` without a week).
+    private var shown: [TodoItem] { week.first { $0.isToday }?.items ?? items }
+    private var doneCount: Int { shown.filter(\.done).count }
+    private var hasUnfinished: Bool { shown.contains { !$0.done } }
+    private var weekHasItems: Bool { week.contains { !$0.items.isEmpty } }
+    private var title: String { weekMode ? "This week 🌱" : "Today 🌱" }
 
     public var body: some View {
         VStack(spacing: 12) {
@@ -80,8 +92,8 @@ public struct TodoCardView: View {
                 AskTab(state: ask, text: $askText, focused: $askFocused, send: sendAsk)
             } else {
                 field
-                if items.isEmpty { EmptyTodoState() }
-                if !items.isEmpty || (!later.isEmpty && laterOpen) { list }
+                if weekMode ? !weekHasItems : shown.isEmpty { EmptyTodoState() }
+                if weekMode ? (weekHasItems || (!later.isEmpty && laterOpen)) : (!shown.isEmpty || (!later.isEmpty && laterOpen)) { list }
                 if !later.isEmpty && !laterOpen { laterSection }
                 if showMoveToTomorrow && hasUnfinished {
                     moveButton
@@ -91,7 +103,8 @@ public struct TodoCardView: View {
         .padding(16)
         .frame(width: Self.width)
         .background(CardBackground())
-        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: items)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: shown)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: week)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: later)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: laterOpen)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: showMoveToTomorrow)
@@ -131,11 +144,12 @@ public struct TodoCardView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
-            Text("Today 🌱")
+            Text(title)
+                .lineLimit(1).minimumScaleFactor(0.7).layoutPriority(1)
                 .font(.mochi(20, .bold))
                 .foregroundStyle(Palette.text)
             Spacer(minLength: 4)
-            if !items.isEmpty && tab == .todos { progress }
+            if !shown.isEmpty && tab == .todos { progress }
             Button { actions.close() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .bold))
@@ -150,7 +164,7 @@ public struct TodoCardView: View {
     }
 
     private var progress: some View {
-        let total = items.count
+        let total = shown.count
         let frac = total == 0 ? 0 : Double(doneCount) / Double(total)
         return HStack(spacing: 6) {
             Capsule().fill(Palette.softFill)
@@ -210,14 +224,37 @@ public struct TodoCardView: View {
 
     // MARK: list
 
+    private func row(_ item: TodoItem) -> some View {
+        TodoRow(item: item, now: now, actions: actions)
+            .transition(reduceMotion ? .opacity
+                        : .asymmetric(insertion: .scale(scale: 0.92).combined(with: .opacity),
+                                      removal: .opacity))
+    }
+
+    /// One heading per day that has to-dos (Today always), in date order.
+    @ViewBuilder
+    private var weekSections: some View {
+        ForEach(week.filter { $0.isToday || !$0.items.isEmpty }) { day in
+            DayHeading(date: day.date, isToday: day.isToday)
+            if day.items.isEmpty {
+                Text("Nothing yet, add something sweet ✨")
+                    .font(.mochi(13, .medium))
+                    .foregroundStyle(Palette.text.opacity(0.55))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+            } else {
+                ForEach(day.items) { item in row(item) }
+            }
+        }
+    }
+
     private var list: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 2) {
-                ForEach(items) { item in
-                    TodoRow(item: item, now: now, actions: actions)
-                        .transition(reduceMotion ? .opacity
-                                    : .asymmetric(insertion: .scale(scale: 0.92).combined(with: .opacity),
-                                                  removal: .opacity))
+                if weekMode {
+                    weekSections
+                } else {
+                    ForEach(shown) { item in row(item) }
                 }
                 if !later.isEmpty && laterOpen { laterSection }
             }
@@ -251,7 +288,7 @@ public struct TodoCardView: View {
                 }
             }
         }
-        .padding(.top, items.isEmpty ? 0 : 4)
+        .padding(.top, shown.isEmpty ? 0 : 4)
     }
 
     private var moveButton: some View {
@@ -497,6 +534,27 @@ private struct NoticeStrip: View {
     }
 }
 
+// MARK: - Day heading
+
+private struct DayHeading: View {
+    let date: Date
+    let isToday: Bool
+
+    var body: some View {
+        let wd = date.formatted(.dateTime.weekday(.abbreviated))
+        let md = date.formatted(.dateTime.month(.abbreviated).day())
+        Text(isToday ? "Today · \(wd) \(md)" : "\(wd) · \(md)")
+            .font(.mochi(12, .semibold))
+            .foregroundStyle(Palette.text.opacity(0.7))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.top, 8).padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityLabel(isToday ? "Today, " + date.formatted(.dateTime.weekday(.wide).month(.wide).day())
+                                        : date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+    }
+}
+
 // MARK: - Ask Mochi
 
 public enum TodoCardTab: Sendable { case todos, ask }
@@ -549,7 +607,7 @@ private struct AskTab: View {
     @State private var replyHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let suggestions = ["Plan my afternoon 🌤️", "What's left today?", "Cheer me up 💕", "Start a focus 🌱"]
+    private static let suggestions = ["Plan my day ☀️", "Plan my week 🗓️", "Cheer me up 💕", "Start a focus 🌱"]
     private var fresh: Bool { state.reply == nil && !state.isThinking && state.actionsTaken.isEmpty }
 
     var body: some View {

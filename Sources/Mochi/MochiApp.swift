@@ -1,7 +1,6 @@
 import SwiftUI
 import MochiCore
 
-@main
 struct MochiApp: App {
     private let model = AppModel.shared
 

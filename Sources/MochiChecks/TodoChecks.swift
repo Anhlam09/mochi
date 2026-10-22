@@ -154,6 +154,69 @@ import MochiCore
         // Persisted.
         expect(TodoStore(fileURL: url, calendar: cal, now: now).items.filter { $0.day == tomorrow }.count == 2)
     }
+    check("week: 7 days from today, items placed by day, today matches the today list") {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let s = TodoStore(fileURL: url, calendar: cal, now: now)
+        s.add("old", now: date(12, 9))
+        s.add("plain one", now: now)
+        let fin = s.add("finished one", now: now)!
+        s.toggle(id: fin.id, now: date(14, 9))
+        @MainActor func on(_ title: String, _ day: Int, done: Bool = false) {
+            let item = s.add(title, now: now, defaultDay: date(day, 0))!
+            if done { s.toggle(id: item.id, now: date(14, 9)) }
+        }
+        on("fri b", 16); on("fri done", 16, done: true); on("fri a", 16); on("sun", 18); on("day7", 20); on("beyond", 21)
+        let week = s.week(now: now)
+        expect(week.count == 7 && week[0].isToday && !week[1].isToday)
+        expect(week.map(\.date) == (0..<7).map { cal.date(byAdding: .day, value: $0, to: cal.startOfDay(for: now))! }, "consecutive days")
+        expect(week[0].items == s.todayList(now: now), "today is the today list")
+        expect(week[0].openCount == 2 && week[0].items.map(\.title) == ["old", "plain one", "finished one", "fri done"], "carried-over first, items ticked today last: \(week[0].items.map(\.title))")
+        expect(week[2].items.map(\.title) == ["fri b", "fri a", "fri done"], "\(week[2].items.map(\.title)): open by creation, done last")
+        expect(week[2].openCount == 2 && week[4].items.map(\.title) == ["sun"] && week[6].items.map(\.title) == ["day7"])
+        expect(week[1].items.isEmpty && week[1].openCount == 0)
+        expect(s.laterList(now: now).map(\.title) == ["beyond"], "later: \(s.laterList(now: now).map(\.title))")
+        expect(!week.flatMap(\.items).contains { $0.title == "beyond" })
+        // Timed items sort first on a future day.
+        let t = TodoStore(fileURL: tempURL(), calendar: cal, now: now)
+        defer { try? FileManager.default.removeItem(at: t.fileURL.deletingLastPathComponent()) }
+        t.add("untimed", now: now, defaultDay: date(15, 0))
+        t.add("late 5pm", now: now, defaultDay: date(15, 0)); t.add("early 9am", now: now, defaultDay: date(15, 0))
+        expect(t.week(now: now)[1].items.map(\.title) == ["early", "late", "untimed"], "\(t.week(now: now)[1].items.map(\.title))")
+    }
+    check("week: daylight-saving changes still give seven distinct days") {
+        var ny = Calendar(identifier: .gregorian)
+        ny.timeZone = TimeZone(identifier: "America/New_York")!
+        for start in [DateComponents(year: 2026, month: 10, day: 30, hour: 23), DateComponents(year: 2026, month: 3, day: 5, hour: 1)] {
+            let d = ny.date(from: start)!
+            let week = TodoList.week([], now: d, calendar: ny)
+            let days = week.map { ny.dateComponents([.year, .month, .day, .hour], from: $0.date) }
+            expect(week.count == 7 && days.allSatisfy { $0.hour == 0 }, "\(days)")
+            expect(Set(week.map(\.date)).count == 7)
+            expect(zip(week, week.dropFirst()).allSatisfy { ny.isDate($1.date, inSameDayAs: ny.date(byAdding: .day, value: 1, to: $0.date)!) })
+        }
+    }
+    check("store: a default day applies only when the text names no day") {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let s = TodoStore(fileURL: url, calendar: cal, now: now)
+        let thu = cal.startOfDay(for: date(16, 0))
+        let plain = s.add("buy milk", now: now, defaultDay: date(16, 12))!
+        expect(plain.day == thu && plain.time == nil, "\(plain)")
+        let timed = s.add("gym 6pm", now: now, defaultDay: date(16, 12))!
+        expect(timed.day == thu && timed.time.map { cal.dateComponents([.hour, .minute, .day], from: $0) } == DateComponents(day: 16, hour: 18, minute: 0), "\(timed)")
+        let today = s.add("buy milk", now: now)!
+        expect(today.day == cal.startOfDay(for: now), "no default: today as before")
+        // A day written in the text wins over the default (the detector reads the real clock, so only
+        // check that it did not simply take the default).
+        let real = Date()
+        let tmp = TodoStore(fileURL: tempURL(), calendar: .autoupdatingCurrent, now: real)
+        defer { try? FileManager.default.removeItem(at: tmp.fileURL.deletingLastPathComponent()) }
+        let def = Calendar.autoupdatingCurrent.date(byAdding: .day, value: 4, to: real)!
+        let tomorrow = tmp.add("report tomorrow", now: real, defaultDay: def)!
+        expect(tomorrow.day == Calendar.autoupdatingCurrent.date(byAdding: .day, value: 1, to: Calendar.autoupdatingCurrent.startOfDay(for: real)), "explicit day wins")
+        expect(tomorrow.title == "report")
+    }
     check("store: prunes done items older than 30 days on load") {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -390,9 +453,10 @@ import MochiCore
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let s = TodoStore(fileURL: url, calendar: cal, now: now)
         s.add("today", now: now)
-        s.add("future b", now: date(16, 9)); s.add("future a", now: date(15, 9))
+        s.add("future b", now: date(14, 9), defaultDay: date(22, 0)); s.add("future a", now: date(14, 9), defaultDay: date(21, 0))
+        s.add("inside the week", now: date(14, 9), defaultDay: date(20, 0))
         let later = s.laterList(now: now).map(\.title)
-        expect(later == ["future a", "future b"], "\(later)")
+        expect(later == ["future a", "future b"], "\(later), the week itself is not 'later'")
         let day = cal.date(byAdding: .day, value: 2, to: cal.startOfDay(for: now))!
         var us = cal; us.locale = Locale(identifier: "en_US_POSIX")
         expect(TodoList.dayLabel(day, now: now, calendar: cal) == "Fri", TodoList.dayLabel(day, now: now, calendar: cal))

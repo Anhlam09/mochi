@@ -22,12 +22,14 @@ public struct TodoParser: Sendable {
     public static let maxTitleLength = 120
     public static let maxInputLength = 500
 
-    public static func parse(_ text: String, now: Date, calendar: Calendar = .autoupdatingCurrent)
+    /// `defaultDay`: the day to use when the text names none (a time in the text then applies on that
+    /// day); an explicit day in the text wins.
+    public static func parse(_ text: String, now: Date, calendar: Calendar = .autoupdatingCurrent, defaultDay: Date? = nil)
         -> (title: String, day: Date, time: Date?)? {
         let trimmed = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxInputLength))
         guard !trimmed.isEmpty else { return nil }
         let today = calendar.startOfDay(for: now)
-        let plain = (title: cap(trimmed), day: today, time: Date?.none)
+        let plain = (title: cap(trimmed), day: defaultDay.map { calendar.startOfDay(for: $0) } ?? today, time: Date?.none)
         let ns = trimmed as NSString
         let full = NSRange(location: 0, length: ns.length)
 
@@ -48,7 +50,7 @@ public struct TodoParser: Sendable {
         let title = remainingTitle(trimmed, removing: removed)
         guard !removed.isEmpty, !title.isEmpty else { return plain }
 
-        let theDay = day ?? today
+        let theDay = day ?? defaultDay.map { calendar.startOfDay(for: $0) } ?? today
         var time: Date?
         if let t = tokens.first {
             time = calendar.date(bySettingHour: t.hour, minute: t.minute, second: 0, of: theDay)
