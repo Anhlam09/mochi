@@ -36,8 +36,19 @@ public final class MochiSettings {
     public var todoWrapUpHour: Int { didSet { defaults.set(todoWrapUpHour, forKey: "todoWrapUpHour") } }
     public var todoWrapUpMinute: Int { didSet { defaults.set(todoWrapUpMinute, forKey: "todoWrapUpMinute") } }
 
+    /// The first-launch welcome has been shown (or was not needed). Once per install.
+    public var hasWelcomed: Bool { didSet { defaults.set(hasWelcomed, forKey: "hasWelcomed") } }
+    /// True if any setting was already stored when this object was created, i.e. Mochi has run here before.
+    @ObservationIgnored public let looksLikeExistingInstall: Bool
+
+    private static let installMarkers = ["presetID", "customFocusMinutes", "customBreakMinutes", "soundEnabled", "showMascot",
+                                         "autoStart", "mascotSize", "calmMode", "chatLevel", "friendName", "flavor",
+                                         "flavorRotation", "todosEnabled", "todoNudges", "smartMochi", "positivity"]
+
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        looksLikeExistingInstall = Self.installMarkers.contains { defaults.object(forKey: $0) != nil }
+        hasWelcomed = defaults.object(forKey: "hasWelcomed") as? Bool ?? false
         let stored = defaults.string(forKey: "presetID") ?? "gentle"
         presetID = (stored == "custom" || Preset.preset(id: stored) != nil) ? stored : "gentle"
         customFocusMinutes = defaults.object(forKey: "customFocusMinutes") as? Int ?? 30
@@ -48,7 +59,7 @@ public final class MochiSettings {
         mascotSize = defaults.string(forKey: "mascotSize") ?? "medium"
         calmMode = defaults.object(forKey: "calmMode") as? Bool ?? true
         chatLevel = defaults.string(forKey: "chatLevel").flatMap(ChatLevel.init(rawValue:))?.rawValue
-            ?? ChatLevel.often.rawValue
+            ?? ChatLevel.sometimes.rawValue
         flavor = defaults.string(forKey: "flavor") ?? "strawberry"
         flavorRotation = defaults.object(forKey: "flavorRotation") as? Bool ?? true
         todosEnabled = defaults.object(forKey: "todosEnabled") as? Bool ?? true
@@ -70,10 +81,21 @@ public final class MochiSettings {
                           wrapUpMinute: todoWrapUpMinute, nudges: todoNudges)
     }
 
-    public var chat: ChatLevel { ChatLevel(rawValue: chatLevel) ?? .often }
+    public var chat: ChatLevel { ChatLevel(rawValue: chatLevel) ?? .sometimes }
 
     public var preset: Preset {
         if presetID == "custom" { return .custom(focusMinutes: customFocusMinutes, breakMinutes: customBreakMinutes) }
         return Preset.preset(id: presetID) ?? .gentle
     }
+}
+
+/// Decides whether the one-time first-launch welcome is still due.
+public enum Welcome {
+    /// Someone who already used Mochi (a stored setting, any to-dos, or a prior welcome) never gets it.
+    public static func alreadyWelcomed(hasWelcomed: Bool, hasTodos: Bool, looksLikeExistingInstall: Bool) -> Bool {
+        hasWelcomed || hasTodos || looksLikeExistingInstall
+    }
+
+    public static let intro = "Hi! I'm Mochi 🌱 Click me to start a focus, and tap 📝 for your to-dos."
+    public static let permissionAsk = "Can I send you little reminders? 🔔"
 }

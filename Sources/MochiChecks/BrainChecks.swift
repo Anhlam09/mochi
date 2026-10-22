@@ -273,6 +273,28 @@ import MochiCore
         let two = [item("Call"), item("Call mom")]
         if case .found(let i) = TodoMatcher.find("call", in: two) { expect(i.title == "Call") } else { expect(false, "exact wins") }
     }
+    check("welcome: only brand-new installs get the intro") {
+        expect(!Welcome.alreadyWelcomed(hasWelcomed: false, hasTodos: false, looksLikeExistingInstall: false))
+        expect(Welcome.alreadyWelcomed(hasWelcomed: true, hasTodos: false, looksLikeExistingInstall: false))
+        expect(Welcome.alreadyWelcomed(hasWelcomed: false, hasTodos: true, looksLikeExistingInstall: false))
+        expect(Welcome.alreadyWelcomed(hasWelcomed: false, hasTodos: false, looksLikeExistingInstall: true))
+        let suite = "mochi.checks.welcome.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        let fresh = MochiSettings(defaults: d)
+        expect(!fresh.looksLikeExistingInstall && !fresh.hasWelcomed)
+        fresh.hasWelcomed = true
+        expect(MochiSettings(defaults: d).hasWelcomed, "persisted")
+        // An older install: some setting (e.g. the mascot size) is already stored.
+        let old = UserDefaults(suiteName: suite + ".old")!
+        old.set("tiny", forKey: "mascotSize")
+        expect(MochiSettings(defaults: old).looksLikeExistingInstall)
+        // Opening settings alone does not make a fresh install look old.
+        let d2 = UserDefaults(suiteName: suite + ".2")!
+        _ = MochiSettings(defaults: d2)
+        expect(!MochiSettings(defaults: d2).looksLikeExistingInstall)
+        expect(Welcome.intro.count <= 80 && Welcome.permissionAsk.count <= 40)
+        for n in [suite, suite + ".old", suite + ".2"] { UserDefaults(suiteName: n)!.removePersistentDomain(forName: n) }
+    }
     check("settings: smart mochi defaults") {
         let d = UserDefaults(suiteName: "mochi-check-\(UUID().uuidString)")!
         let s = MochiSettings(defaults: d)

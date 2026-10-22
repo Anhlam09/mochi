@@ -16,7 +16,7 @@ func renderTodoPreviews(into dir: URL) {
 
     let items = [
         TodoItem(title: "Reply to Mina's email", day: yesterday),
-        TodoItem(title: "Call mom", day: today, time: at3pm),
+        TodoItem(title: "Go for a walkie", day: today, time: at3pm),
         TodoItem(title: "Buy oat milk and strawberries", day: today),
         TodoItem(title: "Water the plants", day: today, done: true, doneAt: now),
     ]

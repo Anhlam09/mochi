@@ -127,6 +127,19 @@ final class Companion {
         return true
     }
 
+    /// A plain notice (the first-launch welcome): outranks chatter like a to-do line, but a tap on
+    /// Mochi still does its normal thing. Shown even when chat is Off.
+    func sayNotice(_ text: String, seconds: TimeInterval) {
+        todoLine = text
+        todoTap = nil
+        todoClearTask?.cancel()
+        todoClearTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self?.clearTodoLine()
+        }
+    }
+
     func clearTodoLine() {
         todoClearTask?.cancel()
         todoLine = nil

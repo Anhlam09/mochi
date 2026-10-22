@@ -68,6 +68,9 @@ final class AppModel {
         self.panel = panel
         coordinator.attach(panel: panel)
         coordinator.start()
+        let welcome = WelcomeCoordinator(settings: settings, store: todos, companion: companion, nudger: nudger)
+        welcome.startIfNeeded()
+        self.welcome = welcome
         trackMascotVisibility()
         trackMascotSize()
     }
@@ -77,6 +80,7 @@ final class AppModel {
     private var monitor: SystemMonitor?
     private var panel: FloatingPanelController?
     private var todoCoordinator: TodoCoordinator?
+    private var welcome: WelcomeCoordinator?
     private var positivity: PositivityCoordinator?
 
     func openTodoCard() { todoCoordinator?.openCard() }

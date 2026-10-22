@@ -31,8 +31,17 @@ final class Nudger: NSObject, UNUserNotificationCenterDelegate {
         center.setNotificationCategories([
             UNNotificationCategory(identifier: "BREAK_DUE", actions: actions, intentIdentifiers: [], options: [])
         ])
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
         trackPhase()
+    }
+
+    /// Asks for notification permission, once, and only if the user has never been asked
+    /// (existing users and anyone who already chose are never prompted again).
+    func requestPermissionIfNeeded() {
+        guard center != nil else { return }
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else { return }
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
     }
 
     func handle(_ event: EngineEvent) {

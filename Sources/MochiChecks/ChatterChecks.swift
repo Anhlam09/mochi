@@ -99,12 +99,14 @@ import MochiCore
         let d = UserDefaults(suiteName: suite)!
         d.removePersistentDomain(forName: suite)
         let s = MochiSettings(defaults: d)
-        expect(s.chat == .often)
+        expect(s.chat == .sometimes, "new users get the gentler default")
         s.chatLevel = ChatLevel.sometimes.rawValue; s.friendName = "Anh"
         let t = MochiSettings(defaults: d)
         expect(t.chat == .sometimes && t.friendName == "Anh")
         d.set("chatterbox", forKey: "chatLevel")
-        expect(MochiSettings(defaults: d).chat == .often)
+        expect(MochiSettings(defaults: d).chat == .sometimes)
+        d.set(ChatLevel.often.rawValue, forKey: "chatLevel")
+        expect(MochiSettings(defaults: d).chat == .often, "a stored choice is kept")
         d.removePersistentDomain(forName: suite)
     }
 }
