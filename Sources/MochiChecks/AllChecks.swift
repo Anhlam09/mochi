@@ -9,4 +9,5 @@ import MochiCore
     runChatterChecks()
     runTodoChecks()
     runBrainChecks()
+    runExtrasChecks()
 }

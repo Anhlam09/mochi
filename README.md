@@ -34,6 +34,11 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
   - **Ask Mochi** in the to-do card: "Plan my day", "Plan my week", "Cheer me up", or anything like "remind me to stretch at 4". Mochi can add, move, tick off to-dos and start a focus or break, but only when you ask, only for to-dos you named, and it can't delete anything.
   - Personal kind words a few times a day, based only on counts (focus sessions, to-dos done), never your to-do names.
   - On other Macs (Intel, older macOS, or Apple Intelligence off) Mochi works the same, just without the AI parts.
+- **Little extras** (Settings ⚙︎ → Mochi's little extras):
+  - A greeting with the date whenever you come back to your Mac after 10+ minutes away ("Good morning! ☀️ It's Thursday, October 22.").
+  - A good-night line once each evening (8 pm by default).
+  - Lunch and dinner ideas around 12 and 6 (Any or Vegetarian, never the same idea twice in a week).
+  - Self-care nudges (water, stretch, eyes) every hour or 30 minutes while the focus timer isn't running.
 - **A first-launch hello** that shows you around and asks about notifications at a friendly moment.
 - **Click Mochi** to start the timer, start a due break, or resume from pause. Any other time, it says something nice.
 - **Stepping away counts.** Being idle, locked or asleep for 5 minutes or more counts as a break you took, and Mochi starts a fresh focus when you're back.

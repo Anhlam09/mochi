@@ -163,6 +163,8 @@ struct MenuBarView: View {
 
                 smartSection
 
+                extrasSection
+
                 Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -232,6 +234,34 @@ struct MenuBarView: View {
                 .font(.system(.caption2, design: .rounded))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    @ViewBuilder private var extrasSection: some View {
+        @Bindable var settings = settings
+        DisclosureGroup("Mochi's little extras") {
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Greet me when I'm back", isOn: $settings.wakeGreeting)
+                Toggle("Say good night", isOn: $settings.goodNight)
+                if settings.goodNight {
+                    Picker("Good night at", selection: $settings.goodNightHour) {
+                        ForEach(Array(GoodNight.hours), id: \.self) { Text(Self.clock($0, 0)).tag($0) }
+                    }
+                }
+                Picker("Meal ideas", selection: $settings.mealIdeas) {
+                    ForEach(MealMode.allCases, id: \.rawValue) { Text($0.displayName).tag($0.rawValue) }
+                }
+                Picker("Self-care nudges", selection: $settings.selfCareMinutes) {
+                    Text("Off").tag(0)
+                    Text("Every 30 min").tag(30)
+                    Text("Every hour").tag(60)
+                }
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .font(.system(.callout, design: .rounded))
+            .padding(.top, 4)
+        }
+        .font(.system(.callout, design: .rounded))
     }
 
     @ViewBuilder private var smartStatus: some View {

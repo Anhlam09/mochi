@@ -45,7 +45,7 @@ final class AppModel {
 
         let idle = env["MOCHI_IDLE_SECONDS"].flatMap(Double.init) ?? 300
         let monitor = SystemMonitor(engine: engine, threshold: idle)
-        monitor.onReturn = { companion.userReturned() }
+        monitor.onReturn = { companion.userReturned(awayFor: $0) }
         monitor.start()
         self.monitor = monitor
 
@@ -68,6 +68,9 @@ final class AppModel {
         self.panel = panel
         coordinator.attach(panel: panel)
         coordinator.start()
+        let extras = ExtrasCoordinator(engine: engine, settings: settings, companion: companion)
+        extras.start()
+        self.extras = extras
         let welcome = WelcomeCoordinator(settings: settings, store: todos, companion: companion, nudger: nudger)
         welcome.startIfNeeded()
         self.welcome = welcome
@@ -81,6 +84,7 @@ final class AppModel {
     private var panel: FloatingPanelController?
     private var todoCoordinator: TodoCoordinator?
     private var welcome: WelcomeCoordinator?
+    private var extras: ExtrasCoordinator?
     private var positivity: PositivityCoordinator?
 
     func openTodoCard() { todoCoordinator?.openCard() }

@@ -13,7 +13,8 @@ final class SystemMonitor {
     private var pollTask: Task<Void, Never>?
     private var wasIdle = false
     /// Called when the user comes back after being away at least `threshold` seconds.
-    var onReturn: (@MainActor () -> Void)?
+    var onReturn: (@MainActor (TimeInterval) -> Void)?
+    private var lastIdleSeconds: TimeInterval = 0
     private var tokens: [(center: NotificationCenter, token: NSObjectProtocol)] = []
 
     init(engine: TimerEngine, threshold: TimeInterval = 300) {
@@ -59,7 +60,7 @@ final class SystemMonitor {
     private func returned(_ awayFor: TimeInterval?) {
         guard let awayFor else { return }
         wasIdle = false   // this return is handled here, not again by the idle poll
-        if awayFor >= threshold { onReturn?() }
+        if awayFor >= threshold { onReturn?(awayFor) }
         let age = Date().timeIntervalSince(engine.phaseStartedAt)
         if AwayPolicy.action(awayFor: awayFor, phase: engine.phase, threshold: threshold, phaseAge: age) == .naturalBreak {
             triggerNaturalBreak()
@@ -70,8 +71,9 @@ final class SystemMonitor {
         if away.isAway { return }
         let seconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState,
                                                               eventType: CGEventType(rawValue: ~0)!)
-        if wasIdle, seconds < threshold { onReturn?() }
+        if wasIdle, seconds < threshold { onReturn?(lastIdleSeconds) }
         wasIdle = seconds >= threshold
+        lastIdleSeconds = seconds
         let age = Date().timeIntervalSince(engine.phaseStartedAt)
         if idle.update(idleFor: seconds, phase: engine.phase, threshold: threshold, phaseAge: age) == .naturalBreak {
             triggerNaturalBreak()

@@ -74,8 +74,32 @@ final class Companion {
     }
 
     /// Back from idle, lock or sleep: a new day's hello, or a welcome back.
-    func userReturned() {
-        if !greetIfNewDay(Date()) { say(.welcomeBack) }
+    /// After 10+ minutes away (and with the wake greeting on) it's the day-part-and-date greeting instead.
+    func userReturned(awayFor: TimeInterval) {
+        let now = Date()
+        if settings.wakeGreeting, settings.showMascot, settings.chat != .off, isQuiet,
+           WakeGreeting.shouldGreet(awayFor: awayFor), !breakIsDue {
+            defaults.set(now, forKey: Self.greetingKey)   // this counts as today's hello: no second greeting
+            show(WakeGreeting.line(now: now, name: settings.friendName))
+            return
+        }
+        if !greetIfNewDay(now) { say(.welcomeBack) }
+    }
+
+    private var breakIsDue: Bool {
+        switch engine.phase {
+        case .breakDue: true
+        default: false
+        }
+    }
+
+    /// A line from the little extras (good night, meals, self-care). Respects "Mochi talks to you: Off".
+    /// False if something else is on screen or the mascot is hidden, so the caller keeps its slot.
+    @discardableResult
+    func sayExtra(_ line: String) -> Bool {
+        guard settings.showMascot, settings.chat != .off, isQuiet, !breakIsDue else { return false }
+        show(line)
+        return true
     }
 
     /// The mouse moved over Mochi: say hi if it's quiet and it's been a while.
@@ -97,6 +121,7 @@ final class Companion {
     /// Shows a to-do line. Random chatter can't overwrite it while it's up; tapping Mochi runs `onTap`.
     /// `longer`: the line waits for a tap (check-in, wrap-up), so it stays up longer.
     func sayTodo(_ text: String, longer: Bool, onTap: @escaping () -> Void) {
+        lastLineAt = Date()
         todoLine = text
         todoTap = onTap
         todoClearTask?.cancel()
@@ -130,6 +155,7 @@ final class Companion {
     /// A plain notice (the first-launch welcome): outranks chatter like a to-do line, but a tap on
     /// Mochi still does its normal thing. Shown even when chat is Off.
     func sayNotice(_ text: String, seconds: TimeInterval) {
+        lastLineAt = Date()
         todoLine = text
         todoTap = nil
         todoClearTask?.cancel()
@@ -154,9 +180,13 @@ final class Companion {
         return true
     }
 
+    /// When any line (chatter, to-do, welcome, extras) was last put in the bubble.
+    @ObservationIgnored private(set) var lastLineAt: Date?
+
     private func show(_ line: String) {
         guard todoLine == nil else { return }
         let now = Date()
+        lastLineAt = now
         message = line
         scheduleNext(from: now)
         clearTask?.cancel()
@@ -212,7 +242,13 @@ final class Companion {
               ChatSchedule.needsGreeting(lastGreeting: defaults.object(forKey: Self.greetingKey) as? Date, now: now)
         else { return false }
         defaults.set(now, forKey: Self.greetingKey)
-        say(.greeting)
+        if settings.wakeGreeting {
+            // Same format as coming back to the Mac, so there is only ever one kind of greeting.
+            chatter.name = settings.friendName
+            show(WakeGreeting.line(now: now, name: settings.friendName))
+        } else {
+            say(.greeting)
+        }
         return true
     }
 

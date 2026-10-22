@@ -36,6 +36,16 @@ public final class MochiSettings {
     public var todoWrapUpHour: Int { didSet { defaults.set(todoWrapUpHour, forKey: "todoWrapUpHour") } }
     public var todoWrapUpMinute: Int { didSet { defaults.set(todoWrapUpMinute, forKey: "todoWrapUpMinute") } }
 
+    // Mochi's little extras
+    /// Greet with the day part and date when you come back after 10+ minutes away.
+    public var wakeGreeting: Bool { didSet { defaults.set(wakeGreeting, forKey: "wakeGreeting") } }
+    public var goodNight: Bool { didSet { defaults.set(goodNight, forKey: "goodNight") } }
+    /// Hour (19-23) for the good-night line.
+    public var goodNightHour: Int { didSet { defaults.set(goodNightHour, forKey: "goodNightHour") } }
+    /// Raw value of `MealMode`.
+    public var mealIdeas: String { didSet { defaults.set(mealIdeas, forKey: "mealIdeas") } }
+    /// Minutes between self-care nudges; 0 is off.
+    public var selfCareMinutes: Int { didSet { defaults.set(selfCareMinutes, forKey: "selfCareMinutes") } }
     /// The first-launch welcome has been shown (or was not needed). Once per install.
     public var hasWelcomed: Bool { didSet { defaults.set(hasWelcomed, forKey: "hasWelcomed") } }
     /// True if any setting was already stored when this object was created, i.e. Mochi has run here before.
@@ -43,11 +53,17 @@ public final class MochiSettings {
 
     private static let installMarkers = ["presetID", "customFocusMinutes", "customBreakMinutes", "soundEnabled", "showMascot",
                                          "autoStart", "mascotSize", "calmMode", "chatLevel", "friendName", "flavor",
-                                         "flavorRotation", "todosEnabled", "todoNudges", "smartMochi", "positivity"]
+                                         "flavorRotation", "wakeGreeting", "goodNight", "goodNightHour", "mealIdeas", "selfCareMinutes", "todosEnabled", "todoNudges", "smartMochi", "positivity"]
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         looksLikeExistingInstall = Self.installMarkers.contains { defaults.object(forKey: $0) != nil }
+        wakeGreeting = defaults.object(forKey: "wakeGreeting") as? Bool ?? true
+        goodNight = defaults.object(forKey: "goodNight") as? Bool ?? true
+        goodNightHour = min(23, max(19, defaults.object(forKey: "goodNightHour") as? Int ?? 20))
+        mealIdeas = defaults.string(forKey: "mealIdeas").flatMap(MealMode.init(rawValue:))?.rawValue ?? MealMode.any.rawValue
+        let care = defaults.object(forKey: "selfCareMinutes") as? Int ?? 60
+        selfCareMinutes = SelfCare.options.contains(care) ? care : 60
         hasWelcomed = defaults.object(forKey: "hasWelcomed") as? Bool ?? false
         let stored = defaults.string(forKey: "presetID") ?? "gentle"
         presetID = (stored == "custom" || Preset.preset(id: stored) != nil) ? stored : "gentle"
@@ -73,6 +89,8 @@ public final class MochiSettings {
         friendName = defaults.string(forKey: "friendName")
             ?? NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
     }
+
+    public var mealMode: MealMode { MealMode(rawValue: mealIdeas) ?? .any }
 
     public var positivityLevel: Positivity { Positivity(rawValue: positivity) ?? .fewTimesADay }
 
