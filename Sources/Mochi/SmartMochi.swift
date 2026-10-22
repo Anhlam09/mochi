@@ -203,6 +203,17 @@ final class AskMochi {
         guard !closed, !state.isThinking else { return }
         let text = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxInput))
         guard !text.isEmpty else { return }
+        // "Lunch idea" / "what should I eat": answered instantly from the curated lists, no model needed.
+        if MealRequest.isRequest(text) {
+            let mode = MealRequest.mode(from: context.settings.mealMode)
+            let now = Date()
+            let meal = MealRequest.meal(for: text, now: now)
+            if let idea = MealPolicy.pick(meal, mode: mode, memory: MealStore.shared.memory, now: now) {
+                MealStore.shared.commit(idea, now: now, markDay: false)
+                state = AskMochiState(reply: MealRequest.reply(for: idea), isThinking: false, actionsTaken: [], unavailableReason: nil)
+                return
+            }
+        }
         // Availability is checked on every ask (Apple Intelligence can be switched off meanwhile).
         if let reason = SmartMochi.unavailableReason() {
             session = nil

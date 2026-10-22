@@ -126,6 +126,39 @@ import MochiCore
         var one = LineRotor(memory: 3)
         expect(one.next(count: 1) == 0 && one.next(count: 1) == 0, "tiny pools still answer")
     }
+    check("ask: meal requests are detected, to-dos are not") {
+        for t in ["Lunch idea 🥪", "Dinner idea 🍝", "lunch idea", "give me a meal idea", "what should I eat?", "What's for dinner?",
+                  "whats for lunch", "what’s for dinner tonight", "any food ideas? food idea please", "snack idea", "I need ideas for dinner"] {
+            expect(MealRequest.isRequest(t), t)
+        }
+        for t in ["dinner with Sam at 7", "remind me to cook dinner", "call mom at lunch", "plan my day", "buy lunch supplies tomorrow",
+                  "move the dinner reservation to friday", "what's left today?", ""] {
+            expect(!MealRequest.isRequest(t), t)
+        }
+        @MainActor func meal(_ t: String, _ h: Int) -> Meal { MealRequest.meal(for: t, now: at(22, h), calendar: cal) }
+        expect(meal("Lunch idea 🥪", 18) == .lunch && meal("Dinner idea 🍝", 9) == .dinner, "the word wins")
+        expect(meal("what should I eat", 14) == .lunch && meal("what should I eat", 15) == .dinner && meal("snack idea", 8) == .lunch, "else by time")
+        expect(meal("lunch or dinner idea", 20) == .lunch)
+        expect(MealRequest.mode(from: .off) == .any && MealRequest.mode(from: .vegetarian) == .vegetarian && MealRequest.mode(from: .any) == .any)
+        let ramen = MealIdeas.lunch[0]
+        expect(MealRequest.reply(for: ramen) == "How about a warm bowl of ramen? 🍜 Easy and tasty.", MealRequest.reply(for: ramen))
+        for i in MealIdeas.lunch + MealIdeas.dinner { expect(MealRequest.reply(for: i).count <= 90 && LineSanitizer.containsEmoji(MealRequest.reply(for: i)), i.id) }
+    }
+    check("ask: on-demand ideas keep the vegetarian filter, rest for 7 days, and don't use up the scheduled one") {
+        var mem = MealMemory()
+        var seen: Set<String> = []
+        for i in 0..<12 {
+            let now = at(22, 9, i)
+            let idea = MealPolicy.pick(.dinner, mode: MealRequest.mode(from: .vegetarian), memory: mem, now: now, random: { _ in 0 })!
+            expect(idea.vegetarian && !seen.contains(idea.id), "\(idea.id) repeated or not vegetarian")
+            seen.insert(idea.id)
+            MealPolicy.commit(idea, to: &mem, now: now, calendar: cal, markDay: false)
+        }
+        expect(mem.lunchDay == nil && mem.dinnerDay == nil, "asked-for ideas don't mark the day")
+        expect(MealPolicy.due(now: at(22, 19), mode: .any, memory: mem, userActive: true, phase: .idle, calendar: cal) == .dinner)
+        let off = MealPolicy.pick(.lunch, mode: MealRequest.mode(from: .off), memory: .init(), now: at(22, 12), random: { _ in 0 })
+        expect(off != nil, "Off still answers when asked")
+    }
     check("settings: extras defaults and persistence") {
         let name = "mochi.checks.extras.\(UUID().uuidString)"
         let d = UserDefaults(suiteName: name)!

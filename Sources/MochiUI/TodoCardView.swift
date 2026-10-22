@@ -318,9 +318,9 @@ public struct TodoCardView: View {
                     .font(.mochi(13, .medium))
                     .foregroundStyle(Palette.text.opacity(0.55))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .padding(.leading, 8 + DayColumns.indent).padding(.trailing, 8).padding(.vertical, 5)
             } else if !free {
-                ForEach(day.items) { item in row(item) }
+                ForEach(day.items) { item in row(item).padding(.leading, DayColumns.indent) }
             }
         }
     }
@@ -613,6 +613,14 @@ private struct NoticeStrip: View {
 
 // MARK: - Day heading
 
+/// Column layout shared by day headings, today's empty line and the rows under them.
+private enum DayColumns {
+    static let weekday: CGFloat = 40
+    static let gap: CGFloat = 6
+    /// Rows under a heading start at the date column.
+    static let indent: CGFloat = weekday + gap
+}
+
 private struct DayHeading: View {
     let date: Date
     let isToday: Bool
@@ -620,25 +628,32 @@ private struct DayHeading: View {
     let flash: Bool
     let tap: () -> Void
 
-    private var text: String {
-        let wd = date.formatted(.dateTime.weekday(.abbreviated))
-        let md = date.formatted(.dateTime.month(.abbreviated).day())
-        let base = isToday ? "Today · \(wd) \(md)" : "\(wd) · \(md)"
-        return base
-    }
-
     var body: some View {
         Button(action: tap) {
-            Text(text)
-                .font(.mochi(12, .semibold))
-                .foregroundStyle(Palette.text.opacity(free ? 0.45 : 0.7))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .padding(.top, free ? 5 : 8).padding(.bottom, free ? 3 : 2)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(flash ? Palette.blush.opacity(0.3) : .clear))
-                .contentShape(Rectangle())
-                .animation(.easeOut(duration: 0.25), value: flash)
+            HStack(spacing: DayColumns.gap) {
+                Text(date.formatted(.dateTime.weekday(.abbreviated)))
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(width: DayColumns.weekday, alignment: .leading)
+                Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                if isToday {
+                    Text("Today")
+                        .font(.mochi(10, .bold))
+                        .foregroundStyle(Palette.text.opacity(0.8))
+                        .padding(.horizontal, 7).padding(.vertical, 1.5)
+                        .background(Capsule().fill(Palette.blush.opacity(0.4)))
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.mochi(12, .semibold))
+            .foregroundStyle(Palette.text.opacity(free ? 0.45 : 0.7))
+            .padding(.horizontal, 8)
+            .padding(.top, 7).padding(.bottom, 3)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(flash ? Palette.blush.opacity(0.3) : .clear))
+            .contentShape(Rectangle())
+            .animation(.easeOut(duration: 0.25), value: flash)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
@@ -744,23 +759,36 @@ private struct AskTab: View {
         )
     }
 
+    /// Lunch before 15:00 local time, dinner from 15:00.
+    private var mealChip: String {
+        Calendar.current.component(.hour, from: Date()) < 15 ? "Lunch idea 🥪" : "Dinner idea 🍝"
+    }
+
     private var chips: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-            ForEach(Self.suggestions, id: \.self) { s in
-                Button { send(s) } label: {
-                    Text(s)
-                        .font(.mochi(13))
-                        .foregroundStyle(Palette.text)
-                        .lineLimit(1).minimumScaleFactor(0.85)
-                        .frame(maxWidth: .infinity).frame(height: 28)
-                        .background(RoundedRectangle(cornerRadius: 13, style: .circular).fill(Palette.focusRing.opacity(0.2)))
-                        .overlay(RoundedRectangle(cornerRadius: 13, style: .circular).strokeBorder(Palette.focusRing.opacity(0.4), lineWidth: 1))
-                        .contentShape(RoundedRectangle(cornerRadius: 13, style: .circular))
+        let all = Self.suggestions + [mealChip]
+        let rows = stride(from: 0, to: all.count, by: 2).map { Array(all[$0..<min($0 + 2, all.count)]) }
+        return VStack(spacing: 6) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 6) {
+                    ForEach(row, id: \.self) { chip($0) }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(s)
             }
         }
+    }
+
+    private func chip(_ s: String) -> some View {
+        Button { send(s) } label: {
+            Text(s)
+                .font(.mochi(13))
+                .foregroundStyle(Palette.text)
+                .lineLimit(1).minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity).frame(height: 28)
+                .background(RoundedRectangle(cornerRadius: 13, style: .circular).fill(Palette.focusRing.opacity(0.2)))
+                .overlay(RoundedRectangle(cornerRadius: 13, style: .circular).strokeBorder(Palette.focusRing.opacity(0.4), lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: 13, style: .circular))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(s)
     }
 
     private var thinking: some View {

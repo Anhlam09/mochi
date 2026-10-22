@@ -2,6 +2,24 @@ import CoreGraphics
 import Foundation
 import MochiCore
 
+/// The one shared meal memory (ids and dates only), used by the scheduled ideas and by Ask Mochi.
+@MainActor
+final class MealStore {
+    static let shared = MealStore()
+    private let defaults = UserDefaults.standard
+    private static let key = "mealMemory"
+    private(set) var memory: MealMemory
+
+    private init() {
+        memory = defaults.data(forKey: Self.key).flatMap { try? JSONDecoder().decode(MealMemory.self, from: $0) } ?? MealMemory()
+    }
+
+    func commit(_ idea: MealIdea, now: Date, markDay: Bool) {
+        MealPolicy.commit(idea, to: &memory, now: now, markDay: markDay)
+        if let data = try? JSONEncoder().encode(memory) { defaults.set(data, forKey: Self.key) }
+    }
+}
+
 /// Mochi's little extras: a good-night line, lunch and dinner ideas, and gentle self-care nudges.
 /// `MochiCore` decides WHEN (pure, checked); this only shows the lines, one per tick, and only when
 /// Mochi is visible, the user is here and nothing else is being said. Only ids and dates are saved.
@@ -12,20 +30,17 @@ final class ExtrasCoordinator {
     private let companion: Companion
     private let defaults: UserDefaults
     private var loopTask: Task<Void, Never>?
-    private var mealMemory: MealMemory
     private var nightRotor = LineRotor(memory: 3)
     private var careRotor = LineRotor(memory: 3)
     private var lastCare = Date()   // the first nudge comes one interval after launch
 
     private static let nightKey = "goodNightLastNight"
-    private static let mealKey = "mealMemory"
 
     init(engine: TimerEngine, settings: MochiSettings, companion: Companion, defaults: UserDefaults = .standard) {
         self.engine = engine
         self.settings = settings
         self.companion = companion
         self.defaults = defaults
-        mealMemory = defaults.data(forKey: Self.mealKey).flatMap { try? JSONDecoder().decode(MealMemory.self, from: $0) } ?? MealMemory()
     }
 
     func start() {
@@ -54,12 +69,9 @@ final class ExtrasCoordinator {
             if companion.sayExtra(line) { defaults.set(GoodNight.key(now), forKey: Self.nightKey) }
             return
         }
-        if let meal = MealPolicy.due(now: now, mode: settings.mealMode, memory: mealMemory, userActive: active, phase: phase),
-           let idea = MealPolicy.pick(meal, mode: settings.mealMode, memory: mealMemory, now: now) {
-            if companion.sayExtra(idea.line) {
-                MealPolicy.commit(idea, to: &mealMemory, now: now)
-                if let data = try? JSONEncoder().encode(mealMemory) { defaults.set(data, forKey: Self.mealKey) }
-            }
+        if let meal = MealPolicy.due(now: now, mode: settings.mealMode, memory: MealStore.shared.memory, userActive: active, phase: phase),
+           let idea = MealPolicy.pick(meal, mode: settings.mealMode, memory: MealStore.shared.memory, now: now) {
+            if companion.sayExtra(idea.line) { MealStore.shared.commit(idea, now: now, markDay: true) }
             return
         }
         if SelfCare.isDue(now: now, minutes: settings.selfCareMinutes, lastNudge: lastCare, lastOtherLine: companion.lastLineAt,

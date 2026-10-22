@@ -231,9 +231,11 @@ public enum MealPolicy {
         return choices[min(max(0, random(choices.count)), choices.count - 1)]
     }
 
-    public static func commit(_ idea: MealIdea, to memory: inout MealMemory, now: Date, calendar: Calendar = .autoupdatingCurrent) {
+    /// `markDay: false` is for ideas the user asked for: they rest for 7 days but don't use up today's scheduled one.
+    public static func commit(_ idea: MealIdea, to memory: inout MealMemory, now: Date, calendar: Calendar = .autoupdatingCurrent,
+                              markDay: Bool = true) {
         let day = calendar.startOfDay(for: now)
-        if idea.meal == .lunch { memory.lunchDay = day } else { memory.dinnerDay = day }
+        if markDay { if idea.meal == .lunch { memory.lunchDay = day } else { memory.dinnerDay = day } }
         memory.recent[idea.id] = now
         memory.recent = memory.recent.filter { now.timeIntervalSince($0.value) < noRepeat * 2 }
     }
@@ -283,4 +285,41 @@ public enum SelfCare {
         if let other = lastOtherLine, now.timeIntervalSince(other) < otherLineGap { return false }
         return true
     }
+}
+
+// MARK: On-demand meal ideas (Ask Mochi)
+
+public enum MealRequest {
+    private static let triggers = ["lunch idea", "dinner idea", "meal idea", "food idea", "snack idea", "what should i eat",
+                                   "what shall i eat", "what to eat", "what can i eat", "what's for dinner", "whats for dinner",
+                                   "what's for lunch", "whats for lunch", "what is for dinner", "what is for lunch",
+                                   "ideas for lunch", "ideas for dinner", "something to eat"]
+
+    /// True if the text asks for something to eat (not a to-do like "dinner with Sam at 7").
+    public static func isRequest(_ text: String) -> Bool {
+        let l = text.lowercased().replacingOccurrences(of: "’", with: "'")
+        return triggers.contains { l.contains($0) }
+    }
+
+    /// "lunch" or "dinner" in the text picks that meal; otherwise lunch before 15:00 and dinner after.
+    public static func meal(for text: String, now: Date, calendar: Calendar = .autoupdatingCurrent) -> Meal {
+        let l = text.lowercased()
+        let lunch = l.range(of: "lunch"), dinner = l.range(of: "dinner")
+        switch (lunch, dinner) {
+        case let (a?, b?): return a.lowerBound <= b.lowerBound ? .lunch : .dinner
+        case (_?, nil): return .lunch
+        case (nil, _?): return .dinner
+        default: return calendar.component(.hour, from: now) < 15 ? .lunch : .dinner
+        }
+    }
+
+    /// A short, warm reply, e.g. "How about a warm bowl of ramen? 🍜 Simple and cozy."
+    public static func reply(for idea: MealIdea) -> String {
+        let closers = ["Simple and cozy.", "Easy and tasty.", "Comfort without the fuss.", "Hope that sounds good!"]
+        let n = Int(idea.id.dropFirst()) ?? 0
+        return "How about \(idea.text)? \(idea.emoji) \(closers[n % closers.count])"
+    }
+
+    /// The mode to answer with: Off still answers (the user asked), everything else as set.
+    public static func mode(from setting: MealMode) -> MealMode { setting == .off ? .any : setting }
 }

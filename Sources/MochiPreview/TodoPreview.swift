@@ -76,6 +76,9 @@ func renderTodoPreviews(into dir: URL) {
         }
         let actionsDay = TodoCardActions(add: { _ in }, toggle: { _ in }, delete: { _ in },
                                          moveUnfinishedToTomorrow: {}, close: {}, addOnDay: { _, _ in })
+        snapshot(TodoCardView(items: items, now: now, actions: actionsDay, showMoveToTomorrow: true,
+                              week: [TodoWeekDay(date: weekDays[0].date, items: items, openCount: 3, isToday: true)] + weekDays.dropFirst()),
+                 name: "todo_week_today_items_\(mode)", dark: dark, dir: dir)
         snapshot(TodoCardView(items: weekDays[0].items, now: now, actions: actionsDay, showMoveToTomorrow: true,
                               week: weekDays),
                  name: "todo_week_list_\(mode)", dark: dark, dir: dir)
