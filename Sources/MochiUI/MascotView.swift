@@ -361,12 +361,12 @@ public struct MascotView: View {
     /// Badge scale: 1.5625x the figure scale (1.25 x 1.25), never below 1.2 so it stays an easy target at Tiny/Small.
     private static func badgeScale(_ size: MascotSize) -> Double { max(size.scale * 1.5625, 1.2) }
 
-    /// The badge sits at the mascot's upper-right (top-left coordinates of the window).
+    /// The badge sits at the mascot's bottom-right, by its feet (top-left coordinates of the window).
     private var badgeRect: CGRect {
         let win = MascotScene.size(for: size)
         let d = TodoBadgeView.diameter * Self.badgeScale(size)
         let s = size.scale
-        let center = CGPoint(x: win.width / 2 + 62 * s + 4, y: win.height - 124 * s - 2)
+        let center = CGPoint(x: win.width / 2 + 52 * s + d / 2 + (s <= 0.7 ? 10 : 4), y: win.height - max(30 * s, d / 2 + 2))
         return CGRect(x: center.x - d / 2, y: center.y - d / 2, width: d, height: d)
     }
 
