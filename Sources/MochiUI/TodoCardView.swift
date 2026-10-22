@@ -613,12 +613,10 @@ private struct NoticeStrip: View {
 
 // MARK: - Day heading
 
-/// Column layout shared by day headings, today's empty line and the rows under them.
+/// Day headings, today's empty line and the rows under them all share one left edge
+/// (the rows' own 8 pt inset), so the week reads as one straight list.
 private enum DayColumns {
-    static let weekday: CGFloat = 40
-    static let gap: CGFloat = 6
-    /// Rows under a heading start at the date column.
-    static let indent: CGFloat = weekday + gap
+    static let indent: CGFloat = 0
 }
 
 private struct DayHeading: View {
@@ -630,11 +628,8 @@ private struct DayHeading: View {
 
     var body: some View {
         Button(action: tap) {
-            HStack(spacing: DayColumns.gap) {
-                Text(date.formatted(.dateTime.weekday(.abbreviated)))
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                    .frame(width: DayColumns.weekday, alignment: .leading)
-                Text(date.formatted(.dateTime.month(.abbreviated).day()))
+            HStack(spacing: 6) {
+                Text(date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
                     .monospacedDigit()
                     .lineLimit(1)
                 if isToday {
