@@ -70,16 +70,21 @@ func renderTodoPreviews(into dir: URL) {
             let its: [TodoItem] = i == 0 ? [items[1], items[3]]
                 : i == 3 ? [TodoItem(title: "Dentist appointment", day: d, time: at3pm),
                             TodoItem(title: "Pick up the parcel", day: d)]
-                : i == 5 ? [TodoItem(title: "Plan the birthday picnic", day: d)] : []
+                : []
             return TodoWeekDay(date: d, items: its, openCount: its.filter { !$0.done }.count, isToday: i == 0)
         }
-        snapshot(TodoCardView(items: weekDays[0].items, now: now, actions: actions, showMoveToTomorrow: true,
-                              ask: AskMochiState(), week: weekDays),
+        let actionsDay = TodoCardActions(add: { _ in }, toggle: { _ in }, delete: { _ in },
+                                         moveUnfinishedToTomorrow: {}, close: {}, addOnDay: { _, _ in })
+        snapshot(TodoCardView(items: weekDays[0].items, now: now, actions: actionsDay, showMoveToTomorrow: true,
+                              week: weekDays),
                  name: "todo_week_list_\(mode)", dark: dark, dir: dir)
+        snapshot(TodoCardView(items: weekDays[0].items, now: now, actions: actionsDay, showMoveToTomorrow: true,
+                              week: weekDays, initialTarget: weekDays[3].date),
+                 name: "todo_week_pill_\(mode)", dark: dark, dir: dir)
         let emptyToday = weekDays.enumerated().map { i, d in
             i == 0 ? TodoWeekDay(date: d.date, items: [], openCount: 0, isToday: true) : d
         }
-        snapshot(TodoCardView(items: [], now: now, actions: actions, showMoveToTomorrow: false, week: emptyToday),
+        snapshot(TodoCardView(items: [], now: now, actions: actionsDay, showMoveToTomorrow: false, week: emptyToday),
                  name: "todo_week_today_empty_\(mode)", dark: dark, dir: dir)
 
         let badges = HStack(spacing: 0) {

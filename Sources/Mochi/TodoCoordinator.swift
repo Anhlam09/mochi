@@ -204,12 +204,13 @@ final class TodoCoordinator {
         return now >= at
     }
 
-    /// Adds from the card; a to-do for a later day gets a short confirmation bubble.
-    private func add(_ text: String) {
+    /// Adds from the card. `day` is the day picked in the card (a day typed in the text still
+    /// wins); a to-do that lands on a later day only because of the text gets a confirmation bubble.
+    private func add(_ text: String, day: Date? = nil) {
         let now = Date()
-        guard let item = store.add(text, now: now) else { return }
+        guard let item = store.add(text, now: now, defaultDay: day) else { return }
         let cal = Calendar.autoupdatingCurrent
-        guard item.day > cal.startOfDay(for: now), settings.showMascot else { return }
+        guard day == nil, item.day > cal.startOfDay(for: now), settings.showMascot else { return }
         companion.sayTodo("Added for \(TodoList.dayLabel(item.day, now: now, calendar: cal)) 🌱", longer: false) { [weak self] in
             self?.openCard()
         }
@@ -222,7 +223,8 @@ final class TodoCoordinator {
             delete: { [store] in store.delete(id: $0) },
             moveUnfinishedToTomorrow: { [store] in store.moveUnfinishedToTomorrow(now: Date()) },
             close: { [weak self] in self?.cardClosed() },
-            ask: { [weak self] in self?.askMochi?.ask($0) }
+            ask: { [weak self] in self?.askMochi?.ask($0) },
+            addOnDay: { [weak self] text, day in self?.add(text, day: day) }
         )
     }
 }

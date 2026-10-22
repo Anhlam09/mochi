@@ -55,13 +55,19 @@ public struct TodoCardView: View {
 
     @State private var laterOpen = false
     @State private var tab: TodoCardTab = .todos
+    /// Day new to-dos are added to (nil = today). Kept after adding; resets when the card reopens.
+    @State private var targetDate: Date?
+    @State private var flashDate: Date?
+    @State private var pickerOpen = false
+    @State private var pickedDate = Date()
     @State private var askText = ""
     @FocusState private var askFocused: Bool
     private let hasInitialTab: Bool
 
     public init(items: [TodoItem], later: [TodoItem] = [], now: Date, actions: TodoCardActions,
                 showMoveToTomorrow: Bool, notice: String? = nil, ask: AskMochiState? = nil, week: [TodoWeekDay] = [], laterExpanded: Bool = false,
-                initialTab: TodoCardTab? = nil) {
+                initialTab: TodoCardTab? = nil, initialTarget: Date? = nil) {
+        self._targetDate = State(initialValue: initialTarget)
         self.ask = ask
         self.week = week
         self._tab = State(initialValue: initialTab ?? .todos)
@@ -80,7 +86,68 @@ public struct TodoCardView: View {
     private var shown: [TodoItem] { week.first { $0.isToday }?.items ?? items }
     private var doneCount: Int { shown.filter(\.done).count }
     private var hasUnfinished: Bool { shown.contains { !$0.done } }
-    private var weekHasItems: Bool { week.contains { !$0.items.isEmpty } }
+    private var showsDayPill: Bool { weekMode && actions.addOnDay != nil }
+    private var targetIsToday: Bool { targetDate.map { Calendar.current.isDateInToday($0) } ?? true }
+
+    private var pillText: String {
+        guard let d = targetDate, !Calendar.current.isDateInToday(d) else { return "Today" }
+        if week.contains(where: { $0.date == Calendar.current.startOfDay(for: d) }) {
+            return "\(d.formatted(.dateTime.weekday(.abbreviated))) \(d.formatted(.dateTime.day()))"
+        }
+        return d.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private func menuLabel(_ day: TodoWeekDay) -> String {
+        if day.isToday { return "Today" }
+        if Calendar.current.isDateInTomorrow(day.date) { return "Tomorrow" }
+        return day.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
+
+    private func setTarget(_ date: Date, flash: Bool = false) {
+        targetDate = Calendar.current.startOfDay(for: date)
+        guard flash else { return }
+        flashDate = date
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            flashDate = nil
+        }
+    }
+
+    private var dayPill: some View {
+        Menu {
+            ForEach(week) { day in
+                Button(menuLabel(day)) { setTarget(day.date) }
+            }
+            Divider()
+            Button("Pick a date…") { pickerOpen = true }
+        } label: {
+            HStack(spacing: 3) {
+                Text(pillText).font(.mochi(12, .semibold))
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+            }
+            .foregroundStyle(Palette.text.opacity(0.8))
+            .padding(.horizontal, 9).frame(height: 24)
+            .background(RoundedRectangle(cornerRadius: 12, style: .circular)
+                .fill(targetIsToday ? Palette.softFill : Palette.blush.opacity(0.35)))
+            .fixedSize()
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .popover(isPresented: $pickerOpen, arrowEdge: .bottom) {
+            DatePicker("Pick a date", selection: $pickedDate, in: Calendar.current.startOfDay(for: now)..., displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .labelsHidden()
+                .padding(10)
+                .onChange(of: pickedDate) { _, d in
+                    setTarget(d)
+                    pickerOpen = false
+                }
+        }
+        .accessibilityLabel("Day for new to-dos")
+        .accessibilityValue(pillText)
+    }
     private var title: String { weekMode ? "This week 🌱" : "Today 🌱" }
 
     public var body: some View {
@@ -92,8 +159,8 @@ public struct TodoCardView: View {
                 AskTab(state: ask, text: $askText, focused: $askFocused, send: sendAsk)
             } else {
                 field
-                if weekMode ? !weekHasItems : shown.isEmpty { EmptyTodoState() }
-                if weekMode ? (weekHasItems || (!later.isEmpty && laterOpen)) : (!shown.isEmpty || (!later.isEmpty && laterOpen)) { list }
+                if !weekMode && shown.isEmpty { EmptyTodoState() }
+                if weekMode || !shown.isEmpty || (!later.isEmpty && laterOpen) { list }
                 if !later.isEmpty && !laterOpen { laterSection }
                 if showMoveToTomorrow && hasUnfinished {
                     moveButton
@@ -191,7 +258,7 @@ public struct TodoCardView: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Palette.blush)
             TextField("", text: $text,
-                      prompt: Text("Add a to-do… try 'go for a walkie 3pm'")
+                      prompt: Text(showsDayPill ? "Add a to-do… 'walkie 3pm'" : "Add a to-do… try 'go for a walkie 3pm'")
                         .foregroundStyle(Palette.text.opacity(0.4)))
                 .textFieldStyle(.plain)
                 .font(.mochi(15, .medium))
@@ -200,8 +267,9 @@ public struct TodoCardView: View {
                 .onSubmit(submit)
                 .accessibilityLabel("New to-do")
                 .accessibilityHint("Type a to-do, optionally with a time, then press Return")
+            if showsDayPill { dayPill }
         }
-        .padding(.horizontal, 12)
+        .padding(.leading, 12).padding(.trailing, showsDayPill ? 5 : 12)
         .frame(height: 34)
         .background(
             RoundedRectangle(cornerRadius: 17, style: .circular).fill(Palette.fieldFill)
@@ -216,7 +284,12 @@ public struct TodoCardView: View {
     private func submit() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
-            actions.add(trimmed)
+            let cal = Calendar.current
+            if let d = targetDate, !cal.isDateInToday(d), let addOnDay = actions.addOnDay {
+                addOnDay(trimmed, cal.startOfDay(for: d))
+            } else {
+                actions.add(trimmed)
+            }
             text = ""
         }
         fieldFocused = true // keep focus for fast entry
@@ -231,18 +304,22 @@ public struct TodoCardView: View {
                                       removal: .opacity))
     }
 
-    /// One heading per day that has to-dos (Today always), in date order.
+    /// A heading per day for today + 6 days; empty days collapse to a slim "free" line.
     @ViewBuilder
     private var weekSections: some View {
-        ForEach(week.filter { $0.isToday || !$0.items.isEmpty }) { day in
-            DayHeading(date: day.date, isToday: day.isToday)
-            if day.items.isEmpty {
+        ForEach(week) { day in
+            let free = day.items.isEmpty && !day.isToday
+            DayHeading(date: day.date, isToday: day.isToday, free: free, flash: flashDate == day.date) {
+                setTarget(day.date, flash: true)
+                fieldFocused = true
+            }
+            if day.isToday && day.items.isEmpty {
                 Text("Nothing yet, add something sweet ✨")
                     .font(.mochi(13, .medium))
                     .foregroundStyle(Palette.text.opacity(0.55))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8).padding(.vertical, 6)
-            } else {
+            } else if !free {
                 ForEach(day.items) { item in row(item) }
             }
         }
@@ -539,19 +616,34 @@ private struct NoticeStrip: View {
 private struct DayHeading: View {
     let date: Date
     let isToday: Bool
+    let free: Bool
+    let flash: Bool
+    let tap: () -> Void
 
-    var body: some View {
+    private var text: String {
         let wd = date.formatted(.dateTime.weekday(.abbreviated))
         let md = date.formatted(.dateTime.month(.abbreviated).day())
-        Text(isToday ? "Today · \(wd) \(md)" : "\(wd) · \(md)")
-            .font(.mochi(12, .semibold))
-            .foregroundStyle(Palette.text.opacity(0.7))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
-            .padding(.top, 8).padding(.bottom, 2)
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityLabel(isToday ? "Today, " + date.formatted(.dateTime.weekday(.wide).month(.wide).day())
-                                        : date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+        let base = isToday ? "Today · \(wd) \(md)" : "\(wd) · \(md)"
+        return free ? base + " · free ✨" : base
+    }
+
+    var body: some View {
+        Button(action: tap) {
+            Text(text)
+                .font(.mochi(12, .semibold))
+                .foregroundStyle(Palette.text.opacity(free ? 0.45 : 0.7))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.top, free ? 5 : 8).padding(.bottom, free ? 3 : 2)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(flash ? Palette.blush.opacity(0.3) : .clear))
+                .contentShape(Rectangle())
+                .animation(.easeOut(duration: 0.25), value: flash)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel((isToday ? "Today, " : "") + date.formatted(.dateTime.weekday(.wide).month(.wide).day()) + (free ? ", free" : ""))
+        .accessibilityHint("Add new to-dos to this day")
     }
 }
 

@@ -208,6 +208,14 @@ public final class TodoCardController {
         }) { mouseMonitors.append(l) }
     }
 
+    /// The day pill's date-picker popover is its own window; clicks in it must not close the card.
+    private func isCardPopup(_ window: NSWindow?, of panel: NSPanel) -> Bool {
+        guard let window else { return false }
+        return panel.childWindows?.contains(window) == true
+            || window.parent === panel
+            || NSStringFromClass(type(of: window)).contains("Popover")
+    }
+
     private func removeMonitors() {
         mouseMonitors.forEach { NSEvent.removeMonitor($0) }
         mouseMonitors = []
