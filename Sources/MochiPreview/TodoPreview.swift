@@ -49,6 +49,10 @@ func renderTodoPreviews(into dir: URL) {
             ("reply", AskMochiState(
                 reply: "Here's a gentle plan: call mom at 3, then tackle the email while your energy is high. I'd save the groceries for a short walk after 5 🌤️",
                 actionsTaken: ["Added 'call mom' for 3:00 PM ✓", "Moved 'Reply to Mina' to tomorrow ✓"])),
+            ("links", AskMochiState(
+                reply: "How about a cosy pasta night? Garlic, cherry tomatoes and basil take about 20 minutes 🍝",
+                links: [AskLink(title: "🍳 Recipes", url: URL(string: "https://www.google.com/search?q=pasta+recipes")!),
+                        AskLink(title: "📍 Nearby", url: URL(string: "https://www.google.com/maps/search/pasta")!)])),
             ("unavailable", AskMochiState(unavailableReason: "Turn on Apple Intelligence to chat with Mochi ✨")),
         ]
         for (n, st) in asks {

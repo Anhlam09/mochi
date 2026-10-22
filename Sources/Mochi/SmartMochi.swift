@@ -178,6 +178,8 @@ final class AskMochi {
     @ObservationIgnored private var session: Any?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var closed = false
+    /// Bumped by `reset()` so an answer still in flight is dropped.
+    @ObservationIgnored private var epoch = 0
     /// The last snapshot the model was told about (the session already remembers it).
     @ObservationIgnored private var lastSnapshot: String?
     /// Raw model text of the last answer; kept only for the self-test (never stored otherwise).
@@ -199,6 +201,19 @@ final class AskMochi {
         state = AskMochiState()
     }
 
+    /// "Start over": clears the reply, actions and links, and drops the model session so the next
+    /// question isn't mixed with the old ones.
+    func reset() {
+        guard !closed else { return }
+        epoch += 1
+        task?.cancel()
+        task = nil
+        session = nil
+        lastSnapshot = nil
+        tools.beginTurn(userText: "")
+        state = AskMochiState(unavailableReason: SmartMochi.unavailableReason())
+    }
+
     func ask(_ raw: String) {
         guard !closed, !state.isThinking else { return }
         let text = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxInput))
@@ -210,7 +225,7 @@ final class AskMochi {
             let meal = MealRequest.meal(for: text, now: now)
             if let idea = MealPolicy.pick(meal, mode: mode, memory: MealStore.shared.memory, now: now) {
                 MealStore.shared.commit(idea, now: now, markDay: false)
-                state = AskMochiState(reply: MealRequest.reply(for: idea), isThinking: false, actionsTaken: [], unavailableReason: nil)
+                state = MealRequest.state(for: idea)   // answered in code: never enters the model's session
                 return
             }
         }
@@ -238,13 +253,14 @@ final class AskMochi {
         }
         tools.beginTurn(userText: text)
         state = AskMochiState(reply: nil, isThinking: true, actionsTaken: [], unavailableReason: nil)
+        let myEpoch = epoch
         task = Task { @MainActor [weak self] in
             guard let self else { return }
             let snap = self.context.snapshot()
             let send = Self.changed(snap, since: self.lastSnapshot)
             let facts = AgentSnapshot.weekFacts(now: Date(), items: self.context.store.items)
             let outcome = await live.respond(to: text, snapshot: send ? snap : nil, facts: facts)
-            guard !self.closed, !Task.isCancelled else { return }
+            guard !self.closed, !Task.isCancelled, self.epoch == myEpoch else { return }
             let reply: String
             switch outcome {
             case .raw(let raw):

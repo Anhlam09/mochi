@@ -107,6 +107,27 @@ public struct MealIdea: Sendable, Equatable {
     public let emoji: String
     public let vegetarian: Bool
     public let meal: Meal
+    /// A short dish name for web searches, e.g. "ramen". Never contains anything about the user.
+    public let searchTerm: String
+
+    public init(id: String, text: String, emoji: String, vegetarian: Bool, meal: Meal, searchTerm: String) {
+        self.id = id; self.text = text; self.emoji = emoji; self.vegetarian = vegetarian; self.meal = meal
+        self.searchTerm = searchTerm
+    }
+
+    /// "🍳 Recipes" and "📍 Nearby": Google links that only open when tapped (Mochi makes no requests).
+    public var links: [AskLink] {
+        let q = MealIdea.queryWords(searchTerm)
+        return [AskLink(title: "🍳 Recipes", url: URL(string: "https://www.google.com/search?q=\(q)+recipe")!),
+                AskLink(title: "📍 Nearby", url: URL(string: "https://www.google.com/maps/search/\(q)+near+me")!)]
+    }
+
+    /// Words joined with "+", each percent-encoded.
+    static func queryWords(_ term: String) -> String {
+        term.split(whereSeparator: \.isWhitespace)
+            .map { String($0).addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "" }
+            .joined(separator: "+")
+    }
 
     /// "Lunch idea: a warm bowl of ramen? 🍜" (alternating "?" for variety).
     public var line: String {
@@ -124,9 +145,11 @@ public struct MealMemory: Codable, Sendable, Equatable {
 }
 
 public enum MealIdeas {
-    private static func make(_ meal: Meal, _ prefix: String, _ rows: [(String, String, Bool)]) -> [MealIdea] {
-        rows.enumerated().map { MealIdea(id: String(format: "%@%02d", prefix, $0.offset + 1), text: $0.element.0,
-                                         emoji: $0.element.1, vegetarian: $0.element.2, meal: meal) }
+    private static func make(_ meal: Meal, _ prefix: String, _ rows: [(String, String, Bool)], _ terms: [String]) -> [MealIdea] {
+        precondition(rows.count == terms.count)
+        return rows.enumerated().map { MealIdea(id: String(format: "%@%02d", prefix, $0.offset + 1), text: $0.element.0,
+                                                emoji: $0.element.1, vegetarian: $0.element.2, meal: meal,
+                                                searchTerm: terms[$0.offset]) }
     }
 
     public static let lunch: [MealIdea] = make(.lunch, "l", [
@@ -151,7 +174,7 @@ public enum MealIdeas {
         ("a pasta salad with olives and feta", "🥗", true), ("a tofu stir-fry with rice", "🥦", true),
         ("bean and cheese nachos", "🧀", true), ("a few sushi rolls", "🍣", false),
         ("a leftovers remix bowl", "♻️", true), ("a bowl of congee with scallions", "🥣", true),
-    ])
+    ], ["ramen", "banh mi", "pho", "egg rice bowl", "avocado toast", "greek salad", "chicken caesar wrap", "vegetarian bibimbap", "cold sesame noodles", "grilled cheese tomato soup", "burrito bowl", "tuna salad sandwich", "chana masala", "falafel pita", "gimbap", "pesto pasta", "egg fried rice", "miso soup", "cheese quesadilla", "udon", "caprese sandwich", "teriyaki chicken bowl", "lentil soup", "dumplings", "hummus plate", "turkey club sandwich", "pad thai", "vegetable fried noodles", "mac and cheese", "poke bowl", "tomato basil soup", "omelette", "chicken shawarma wrap", "spring rolls", "loaded baked potato", "chicken katsu curry", "pasta salad", "tofu stir fry", "nachos", "sushi rolls", "easy lunch bowl", "congee"])
 
     public static let dinner: [MealIdea] = make(.dinner, "d", [
         ("tacos with lots of lime", "🌮", false), ("a vegetable curry with rice", "🍛", true),
@@ -175,7 +198,7 @@ public enum MealIdeas {
         ("a coconut lentil curry", "🥥", true), ("a tomato and egg stir-fry with rice", "🍅", true),
         ("falafel bowls", "🧆", true), ("loaded baked sweet potatoes", "🍠", true),
         ("bun cha with fresh herbs", "🥢", false), ("chicken fried rice", "🍚", false),
-    ])
+    ], ["tacos", "vegetable curry", "spaghetti aglio e olio", "pho", "sheet pan chicken and vegetables", "mushroom risotto", "bulgogi bowl", "palak paneer", "margherita pizza", "grilled salmon", "vegetable stir fry noodles", "cheese enchiladas", "chicken tikka masala", "thai green curry tofu", "vegetable lasagna", "ramen", "shakshuka", "burgers", "kimchi jjigae", "grilled cheese sandwich", "teriyaki salmon", "chili cornbread", "stuffed bell peppers", "butter chicken", "vegetarian mapo tofu", "gnocchi brown butter sage", "fish tacos", "chicken souvlaki", "dal", "chicken rice soup", "ratatouille", "okonomiyaki", "bean burritos", "pasta primavera", "steak and potatoes", "vegetable dumplings", "coconut lentil curry", "tomato egg stir fry", "falafel bowl", "stuffed sweet potatoes", "bun cha", "chicken fried rice"])
 
     public static func pool(_ meal: Meal, mode: MealMode) -> [MealIdea] {
         let all = meal == .lunch ? lunch : dinner
@@ -318,6 +341,11 @@ public enum MealRequest {
         let closers = ["Simple and cozy.", "Easy and tasty.", "Comfort without the fuss.", "Hope that sounds good!"]
         let n = Int(idea.id.dropFirst()) ?? 0
         return "How about \(idea.text)? \(idea.emoji) \(closers[n % closers.count])"
+    }
+
+    /// The Ask card state for an idea: the reply plus its two search links.
+    public static func state(for idea: MealIdea) -> AskMochiState {
+        AskMochiState(reply: reply(for: idea), links: idea.links)
     }
 
     /// The mode to answer with: Off still answers (the user asked), everything else as set.

@@ -159,6 +159,39 @@ import MochiCore
         let off = MealPolicy.pick(.lunch, mode: MealRequest.mode(from: .off), memory: .init(), now: at(22, 12), random: { _ in 0 })
         expect(off != nil, "Off still answers when asked")
     }
+    check("meal links: clean Google URLs from the dish name only") {
+        for i in MealIdeas.lunch + MealIdeas.dinner {
+            expect(!i.searchTerm.isEmpty && i.searchTerm.count <= 40 && i.searchTerm == i.searchTerm.lowercased(), i.id)
+            let l = i.links
+            expect(l.map(\.title) == ["🍳 Recipes", "📍 Nearby"], i.id)
+            expect(l[0].url.host == "www.google.com" && l[0].url.path == "/search" && l[0].url.scheme == "https", l[0].url.absoluteString)
+            expect(l[1].url.host == "www.google.com" && l[1].url.path.hasPrefix("/maps/search/"), l[1].url.absoluteString)
+            expect(!l[0].url.absoluteString.contains(" ") && !l[1].url.absoluteString.contains(" "))
+        }
+        let ramen = MealIdeas.lunch[0].links
+        expect(ramen[0].url.absoluteString == "https://www.google.com/search?q=ramen+recipe", ramen[0].url.absoluteString)
+        expect(ramen[1].url.absoluteString == "https://www.google.com/maps/search/ramen+near+me", ramen[1].url.absoluteString)
+        let tacos = MealIdeas.dinner[0].links
+        expect(tacos[0].url.absoluteString == "https://www.google.com/search?q=tacos+recipe")
+        let odd = MealIdea(id: "x1", text: "t", emoji: "🍜", vegetarian: true, meal: .lunch, searchTerm: "mac & cheese ü")
+        expect(odd.links[0].url.absoluteString == "https://www.google.com/search?q=mac+%26+cheese+%C3%BC+recipe", odd.links[0].url.absoluteString)
+        let bad = MealIdea(id: "x2", text: "t", emoji: "🍜", vegetarian: true, meal: .lunch, searchTerm: "a#b?c=d/e")
+        expect(bad.links[0].url.query == "q=a%23b%3Fc%3Dd%2Fe+recipe", bad.links[0].url.query ?? "nil")
+        // No user data: the links depend on the idea alone (no name, to-dos, times, ids).
+        let all = (MealIdeas.lunch + MealIdeas.dinner).flatMap(\.links).map(\.url.absoluteString).joined()
+        expect(!all.lowercased().contains("uuid") && !all.contains("@"), "nothing but the dish name goes into a link")
+    }
+    check("ask state: meal replies carry links, the next reply or a reset clears them") {
+        let idea = MealIdeas.lunch[0]
+        let meal = MealRequest.state(for: idea)
+        expect(meal.reply == MealRequest.reply(for: idea) && meal.links.count == 2 && meal.actionsTaken.isEmpty && !meal.isThinking)
+        let thinking = AskMochiState(reply: nil, isThinking: true, actionsTaken: [], unavailableReason: nil)
+        expect(thinking.links.isEmpty, "a new question clears the links")
+        let plan = AskMochiState(reply: "Start with the report.", isThinking: false, actionsTaken: [])
+        expect(plan.links.isEmpty, "a normal reply has none")
+        expect(AskMochiState() == AskMochiState(reply: nil, isThinking: false, actionsTaken: [], unavailableReason: nil, links: []), "reset state is empty")
+        expect(AskMochiState().links.isEmpty && AskMochiState().reply == nil)
+    }
     check("settings: extras defaults and persistence") {
         let name = "mochi.checks.extras.\(UUID().uuidString)"
         let d = UserDefaults(suiteName: name)!

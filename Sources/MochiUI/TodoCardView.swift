@@ -12,6 +12,8 @@ public struct TodoCardActions {
     public var ask: (@MainActor (String) -> Void)?
     /// Adds a to-do on a chosen day (week strip). Falls back to `add` when nil.
     public var addOnDay: (@MainActor (String, Date) -> Void)?
+    /// Clears Mochi's reply so the Ask tab starts over ("↺ Start over").
+    public var resetAsk: (@MainActor () -> Void)?
 
     public init(add: @escaping @MainActor (String) -> Void,
                 toggle: @escaping @MainActor (UUID) -> Void,
@@ -19,7 +21,9 @@ public struct TodoCardActions {
                 moveUnfinishedToTomorrow: @escaping @MainActor () -> Void,
                 close: @escaping @MainActor () -> Void,
                 ask: (@MainActor (String) -> Void)? = nil,
-                addOnDay: (@MainActor (String, Date) -> Void)? = nil) {
+                addOnDay: (@MainActor (String, Date) -> Void)? = nil,
+                resetAsk: (@MainActor () -> Void)? = nil) {
+        self.resetAsk = resetAsk
         self.ask = ask
         self.addOnDay = addOnDay
         self.add = add
@@ -156,7 +160,7 @@ public struct TodoCardView: View {
             header
             if ask != nil { TabSwitch(tab: $tab) }
             if tab == .ask, let ask {
-                AskTab(state: ask, text: $askText, focused: $askFocused, send: sendAsk)
+                AskTab(state: ask, text: $askText, focused: $askFocused, send: sendAsk) { actions.resetAsk?() }
             } else {
                 field
                 if !weekMode && shown.isEmpty { EmptyTodoState() }
@@ -706,11 +710,15 @@ private struct AskTab: View {
     @Binding var text: String
     var focused: FocusState<Bool>.Binding
     let send: (String) -> Void
+    let reset: () -> Void
+    /// Set by "Start over" so the reply hides and the chips return immediately, even before the app clears its state.
+    @State private var startedOver = false
     @State private var replyHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let suggestions = ["Plan my day ☀️", "Plan my week 🗓️", "Cheer me up 💕", "Start a focus 🌱"]
-    private var fresh: Bool { state.reply == nil && !state.isThinking && state.actionsTaken.isEmpty }
+    private var hasAnswer: Bool { state.reply != nil || !state.actionsTaken.isEmpty || !state.links.isEmpty }
+    private var fresh: Bool { !state.isThinking && (!hasAnswer || startedOver) }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -720,14 +728,67 @@ private struct AskTab: View {
                 field
                 if fresh { chips }
                 if state.isThinking { thinking }
-                if let reply = state.reply, !reply.isEmpty { replyBubble(reply) }
-                if !state.actionsTaken.isEmpty { pills }
+                if !startedOver || state.isThinking {
+                    if let reply = state.reply, !reply.isEmpty { replyBubble(reply) }
+                    if !state.actionsTaken.isEmpty { pills }
+                    if !state.links.isEmpty && !state.isThinking { linkPills }
+                    if hasAnswer && !state.isThinking { startOver }
+                }
             }
             Text("🔒 Runs on your Mac, never sent anywhere")
                 .font(.mochi(12, .medium))
                 .foregroundStyle(Palette.text.opacity(0.55))
                 .accessibilityLabel("Runs on your Mac, never sent anywhere")
         }
+        // A new question or answer shows again after a "Start over".
+        .onChange(of: state.isThinking) { _, thinking in if thinking { startedOver = false } }
+        .onChange(of: state.reply) { _, r in if r != nil { startedOver = false } }
+    }
+
+    private var startOver: some View {
+        Button {
+            startedOver = true
+            reset()
+        } label: {
+            Text("↺ Start over")
+                .font(.mochi(12, .semibold))
+                .foregroundStyle(Palette.text.opacity(0.7))
+                .padding(.horizontal, 10).frame(height: 24)
+                .background(RoundedRectangle(cornerRadius: 12, style: .circular).fill(Palette.softFill))
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .circular))
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .accessibilityLabel("Start over")
+        .accessibilityHint("Clears Mochi's reply and shows the suggestions again")
+    }
+
+    /// Opens the page in the user's browser when tapped; the app itself never fetches anything.
+    private var linkPills: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                ForEach(state.links) { link in
+                    Button { NSWorkspace.shared.open(link.url) } label: {
+                        Text(link.title)
+                            .font(.mochi(13, .medium))
+                            .foregroundStyle(Palette.text)
+                            .lineLimit(1)
+                            .padding(.horizontal, 11).frame(height: 28)
+                            .background(RoundedRectangle(cornerRadius: 13, style: .circular).fill(Palette.focusRing.opacity(0.2)))
+                            .overlay(RoundedRectangle(cornerRadius: 13, style: .circular).strokeBorder(Palette.focusRing.opacity(0.4), lineWidth: 1))
+                            .contentShape(RoundedRectangle(cornerRadius: 13, style: .circular))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(link.title)
+                    .accessibilityHint("Opens in your browser")
+                }
+                Spacer(minLength: 0)
+            }
+            Text("Opens in your browser")
+                .font(.mochi(11, .medium))
+                .foregroundStyle(Palette.text.opacity(0.5))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var field: some View {

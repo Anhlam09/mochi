@@ -179,6 +179,9 @@ final class TodoCoordinator {
         askMochi = nil
     }
 
+    /// The card's "start over" in Ask Mochi.
+    func resetAsk() { askMochi?.reset() }
+
     /// What the card's Ask tab shows: nil hides it (Smart Mochi off), a reason when unavailable.
     private var askState: AskMochiState? {
         guard settings.smartMochi else { return nil }
@@ -224,7 +227,8 @@ final class TodoCoordinator {
             moveUnfinishedToTomorrow: { [store] in store.moveUnfinishedToTomorrow(now: Date()) },
             close: { [weak self] in self?.cardClosed() },
             ask: { [weak self] in self?.askMochi?.ask($0) },
-            addOnDay: { [weak self] text, day in self?.add(text, day: day) }
+            addOnDay: { [weak self] text, day in self?.add(text, day: day) },
+            resetAsk: { [weak self] in self?.resetAsk() }
         )
     }
 }
