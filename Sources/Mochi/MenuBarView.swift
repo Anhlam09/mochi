@@ -161,6 +161,8 @@ struct MenuBarView: View {
                     }
                 }
 
+                smartSection
+
                 Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -209,6 +211,44 @@ struct MenuBarView: View {
         .frame(width: 260)
         .onAppear { loginStatus = LaunchAtLogin.status; loginError = nil }
         .font(.system(.body, design: .rounded))
+    }
+
+    @ViewBuilder private var smartSection: some View {
+        @Bindable var settings = settings
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Smart Mochi ✨ (on-device AI)", isOn: $settings.smartMochi)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .font(.system(.callout, design: .rounded))
+            Picker("Kind words", selection: $settings.positivity) {
+                ForEach(Positivity.allCases, id: \.rawValue) { Text($0.displayName).tag($0.rawValue) }
+            }
+            .controlSize(.small)
+            .font(.system(.callout, design: .rounded))
+            if settings.smartMochi {
+                smartStatus
+            }
+            Text("Runs on your Mac, never sent anywhere.")
+                .font(.system(.caption2, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private var smartStatus: some View {
+        if let reason = SmartMochi.unavailableReason() {
+            Text(reason)
+                .font(.system(.caption2, design: .rounded))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if case .needsAppleIntelligence(let url) = SmartMochi.status {
+                Button("Open Apple Intelligence settings") { NSWorkspace.shared.open(url) }
+                    .font(.system(.caption, design: .rounded))
+            }
+        } else {
+            Text("Ready ✨ Open the to-do card and tap Ask.")
+                .font(.system(.caption2, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
     }
 
     private static func clock(_ h: Int, _ m: Int) -> String {

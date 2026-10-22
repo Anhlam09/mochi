@@ -42,6 +42,20 @@ func renderTodoPreviews(into dir: URL) {
         snapshot(TodoCardView(items: items, later: later, now: now, actions: actions, showMoveToTomorrow: false),
                  name: "todo_card_later_collapsed_\(mode)", dark: dark, dir: dir)
 
+        let asks: [(String, AskMochiState)] = [
+            ("empty", AskMochiState()),
+            ("thinking", AskMochiState(isThinking: true)),
+            ("reply", AskMochiState(
+                reply: "Here's a gentle plan: call mom at 3, then tackle the email while your energy is high. I'd save the groceries for a short walk after 5 🌤️",
+                actionsTaken: ["Added 'call mom' for 3:00 PM ✓", "Moved 'Reply to Mina' to tomorrow ✓"])),
+            ("unavailable", AskMochiState(unavailableReason: "Turn on Apple Intelligence to chat with Mochi ✨")),
+        ]
+        for (n, st) in asks {
+            snapshot(TodoCardView(items: items, now: now, actions: actions, showMoveToTomorrow: true,
+                                  ask: st, initialTab: .ask),
+                     name: "todo_ask_\(n)_\(mode)", dark: dark, dir: dir)
+        }
+
         let badges = HStack(spacing: 0) {
             ForEach([3, 12, 0], id: \.self) { n in
                 MascotView(pose: .idle, progress: 0.3, bubbleText: n == 12 ? "You have 12 to-dos 🌱" : nil,

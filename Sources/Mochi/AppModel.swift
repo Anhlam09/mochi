@@ -49,8 +49,14 @@ final class AppModel {
         monitor.start()
         self.monitor = monitor
 
+        let context = AgentContext(store: todos, engine: engine, settings: settings)
+        eventHandlers.append { context.record($0) }
+        let positivity = PositivityCoordinator(engine: engine, settings: settings, companion: companion, context: context)
+        eventHandlers.append { positivity.handle($0) }
+        positivity.start()
+        self.positivity = positivity
         let coordinator = TodoCoordinator(store: todos, engine: engine, settings: settings,
-                                          companion: companion, nudger: nudger)
+                                          companion: companion, nudger: nudger, context: context)
         todoCoordinator = coordinator
         eventHandlers.append { coordinator.handle($0) }
 
@@ -62,6 +68,7 @@ final class AppModel {
         self.panel = panel
         coordinator.attach(panel: panel)
         coordinator.start()
+        if env["MOCHI_BRAIN_SELFTEST"] == "1" { BrainSelfTest.run(context: context) }
         trackMascotVisibility()
         trackMascotSize()
     }
@@ -71,6 +78,7 @@ final class AppModel {
     private var monitor: SystemMonitor?
     private var panel: FloatingPanelController?
     private var todoCoordinator: TodoCoordinator?
+    private var positivity: PositivityCoordinator?
 
     func openTodoCard() { todoCoordinator?.openCard() }
     func toggleTodoCard() { todoCoordinator?.toggleCard() }

@@ -8,12 +8,16 @@ public struct TodoCardActions {
     public var delete: @MainActor (UUID) -> Void
     public var moveUnfinishedToTomorrow: @MainActor () -> Void
     public var close: @MainActor () -> Void
+    /// Sends a question to Mochi's on-device brain (the "Ask Mochi" tab).
+    public var ask: (@MainActor (String) -> Void)?
 
     public init(add: @escaping @MainActor (String) -> Void,
                 toggle: @escaping @MainActor (UUID) -> Void,
                 delete: @escaping @MainActor (UUID) -> Void,
                 moveUnfinishedToTomorrow: @escaping @MainActor () -> Void,
-                close: @escaping @MainActor () -> Void) {
+                close: @escaping @MainActor () -> Void,
+                ask: (@MainActor (String) -> Void)? = nil) {
+        self.ask = ask
         self.add = add
         self.toggle = toggle
         self.delete = delete
@@ -33,6 +37,8 @@ public struct TodoCardView: View {
     public var later: [TodoItem]
     /// A warm warning strip at the top when non-nil.
     public var notice: String?
+    /// Non-nil adds the "Ask Mochi" tab.
+    public var ask: AskMochiState?
     public var now: Date
     public var actions: TodoCardActions
     public var showMoveToTomorrow: Bool
@@ -42,9 +48,17 @@ public struct TodoCardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var laterOpen = false
+    @State private var tab: TodoCardTab = .todos
+    @State private var askText = ""
+    @FocusState private var askFocused: Bool
+    private let hasInitialTab: Bool
 
     public init(items: [TodoItem], later: [TodoItem] = [], now: Date, actions: TodoCardActions,
-                showMoveToTomorrow: Bool, notice: String? = nil, laterExpanded: Bool = false) {
+                showMoveToTomorrow: Bool, notice: String? = nil, ask: AskMochiState? = nil, laterExpanded: Bool = false,
+                initialTab: TodoCardTab? = nil) {
+        self.ask = ask
+        self._tab = State(initialValue: initialTab ?? .todos)
+        self.hasInitialTab = initialTab != nil
         self._laterOpen = State(initialValue: laterExpanded)
         self.items = items
         self.later = later
@@ -61,12 +75,17 @@ public struct TodoCardView: View {
         VStack(spacing: 11) {
             if let notice, !notice.isEmpty { NoticeStrip(text: notice) }
             header
-            field
-            if items.isEmpty { EmptyTodoState() }
-            if !items.isEmpty || (!later.isEmpty && laterOpen) { list }
-            if !later.isEmpty && !laterOpen { laterSection }
-            if showMoveToTomorrow && hasUnfinished {
-                moveButton
+            if ask != nil { TabSwitch(tab: $tab) }
+            if tab == .ask, let ask {
+                AskTab(state: ask, text: $askText, focused: $askFocused, send: sendAsk)
+            } else {
+                field
+                if items.isEmpty { EmptyTodoState() }
+                if !items.isEmpty || (!later.isEmpty && laterOpen) { list }
+                if !later.isEmpty && !laterOpen { laterSection }
+                if showMoveToTomorrow && hasUnfinished {
+                    moveButton
+                }
             }
         }
         .padding(15)
@@ -80,12 +99,32 @@ public struct TodoCardView: View {
             actions.close()
             return .handled
         }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: ask)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: tab)
+        .onAppear { if ask != nil, !hasInitialTab { tab = TabMemory.last } }
+        .onChange(of: tab) { _, new in
+            TabMemory.last = new
+            focusCurrentField()
+        }
         .task {
             try? await Task.sleep(nanoseconds: 120_000_000)
-            fieldFocused = true
+            focusCurrentField()
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Today's to-do list")
+    }
+
+    private func focusCurrentField() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            if tab == .ask && ask?.unavailableReason == nil { askFocused = true } else { fieldFocused = true }
+        }
+    }
+
+    private func sendAsk(_ question: String) {
+        let t = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty { actions.ask?(t); askText = "" }
+        askFocused = true
     }
 
     // MARK: header
@@ -96,7 +135,7 @@ public struct TodoCardView: View {
                 .font(.mochi(19, .bold))
                 .foregroundStyle(Palette.text)
             Spacer(minLength: 4)
-            if !items.isEmpty { progress }
+            if !items.isEmpty && tab == .todos { progress }
             Button { actions.close() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .bold))
@@ -458,9 +497,210 @@ private struct NoticeStrip: View {
     }
 }
 
+// MARK: - Ask Mochi
+
+public enum TodoCardTab: Sendable { case todos, ask }
+
+/// Remembers the last tab while the app runs.
+@MainActor
+private enum TabMemory { static var last: TodoCardTab = .todos }
+
+private struct TabSwitch: View {
+    @Binding var tab: TodoCardTab
+    @Namespace private var ns
+
+    var body: some View {
+        HStack(spacing: 2) {
+            seg("📝 To-dos", .todos)
+            seg("✨ Ask Mochi", .ask)
+        }
+        .padding(3)
+        .background(RoundedRectangle(cornerRadius: 16, style: .circular).fill(Palette.softFill))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func seg(_ title: String, _ value: TodoCardTab) -> some View {
+        let on = tab == value
+        return Button { tab = value } label: {
+            Text(title)
+                .font(.mochi(12, on ? .bold : .medium))
+                .foregroundStyle(Palette.text.opacity(on ? 1 : 0.6))
+                .frame(maxWidth: .infinity).frame(height: 26)
+                .background {
+                    if on {
+                        RoundedRectangle(cornerRadius: 13, style: .circular).fill(Palette.blush.opacity(0.35))
+                            .overlay(RoundedRectangle(cornerRadius: 13, style: .circular).strokeBorder(Palette.blush.opacity(0.5), lineWidth: 1))
+                            .matchedGeometryEffect(id: "sel", in: ns)
+                    }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 13, style: .circular))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(value == .todos ? "To-dos" : "Ask Mochi")
+        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+private struct AskTab: View {
+    let state: AskMochiState
+    @Binding var text: String
+    var focused: FocusState<Bool>.Binding
+    let send: (String) -> Void
+    @State private var replyHeight: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let suggestions = ["Plan my afternoon 🌤️", "What's left today?", "Cheer me up 💕", "Start a focus 🌱"]
+    private var fresh: Bool { state.reply == nil && !state.isThinking && state.actionsTaken.isEmpty }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if let reason = state.unavailableReason {
+                EmptyTodoState(text: reason)
+            } else {
+                field
+                if fresh { chips }
+                if state.isThinking { thinking }
+                if let reply = state.reply, !reply.isEmpty { replyBubble(reply) }
+                if !state.actionsTaken.isEmpty { pills }
+            }
+            Text("🔒 Runs on your Mac, never sent anywhere")
+                .font(.mochi(11, .medium))
+                .foregroundStyle(Palette.text.opacity(0.55))
+                .accessibilityLabel("Runs on your Mac, never sent anywhere")
+        }
+    }
+
+    private var field: some View {
+        HStack(spacing: 7) {
+            Text("✨").font(.system(size: 11))
+            TextField("", text: $text,
+                      prompt: Text("Ask me anything… try 'plan my afternoon'")
+                        .foregroundStyle(Palette.text.opacity(0.4)))
+                .textFieldStyle(.plain)
+                .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                .foregroundStyle(Palette.text)
+                .focused(focused)
+                .onSubmit { send(text) }
+                .accessibilityLabel("Ask Mochi")
+                .accessibilityHint("Type a question, then press Return")
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .background(RoundedRectangle(cornerRadius: 17, style: .circular).fill(Palette.fieldFill))
+        .overlay(
+            RoundedRectangle(cornerRadius: 17, style: .circular)
+                .strokeBorder(focused.wrappedValue ? Palette.blush.opacity(0.9) : Palette.ink.opacity(0.1),
+                              lineWidth: focused.wrappedValue ? 1.5 : 1)
+        )
+    }
+
+    private var chips: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
+            ForEach(Self.suggestions, id: \.self) { s in
+                Button { send(s) } label: {
+                    Text(s)
+                        .font(.mochi(12))
+                        .foregroundStyle(Palette.text)
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity).frame(height: 28)
+                        .background(RoundedRectangle(cornerRadius: 13, style: .circular).fill(Palette.focusRing.opacity(0.2)))
+                        .overlay(RoundedRectangle(cornerRadius: 13, style: .circular).strokeBorder(Palette.focusRing.opacity(0.4), lineWidth: 1))
+                        .contentShape(RoundedRectangle(cornerRadius: 13, style: .circular))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(s)
+            }
+        }
+    }
+
+    private var thinking: some View {
+        HStack(spacing: 8) {
+            MiniFace()
+            if reduceMotion {
+                Text("thinking…").font(.mochi(12, .medium)).foregroundStyle(Palette.text.opacity(0.65))
+            } else {
+                TimelineView(.animation) { ctx in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    HStack(spacing: 4) {
+                        ForEach(0..<3, id: \.self) { i in
+                            Circle().fill(Palette.blush).frame(width: 7, height: 7)
+                                .offset(y: -3.5 * max(0, sin(t * 6 - Double(i) * 0.9)))
+                        }
+                    }
+                }
+                .frame(height: 16)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.fieldFill))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Mochi is thinking")
+    }
+
+    private func replyBubble(_ reply: String) -> some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            Text(reply)
+                .font(.mochi(14, .medium))
+                .foregroundStyle(Palette.text)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { replyHeight = $0 }
+        }
+        .frame(height: min(max(replyHeight, 1), 124))
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.fieldFill)
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Palette.blush.opacity(0.35), lineWidth: 1))
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Mochi says: \(reply)")
+    }
+
+    private var pills: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(Array(state.actionsTaken.enumerated()), id: \.offset) { _, a in
+                Text(a)
+                    .font(.mochi(12, .medium))
+                    .foregroundStyle(Palette.text)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 13, style: .circular).fill(Palette.sprout.opacity(0.35)))
+                    .overlay(RoundedRectangle(cornerRadius: 13, style: .circular).strokeBorder(Palette.sprout.opacity(0.7), lineWidth: 1))
+                    .accessibilityLabel("Done: \(a)")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A tiny awake Mochi face for the "thinking" row.
+private struct MiniFace: View {
+    var body: some View {
+        ZStack {
+            LeafShape().fill(Palette.sprout).frame(width: 8, height: 9).offset(y: -13)
+            MochiBodyShape().fill(Palette.body).frame(width: 30, height: 24)
+                .overlay(MochiBodyShape().stroke(Palette.blush.opacity(0.4), lineWidth: 1).frame(width: 30, height: 24))
+            HStack(spacing: 9) {
+                Ellipse().fill(Palette.ink).frame(width: 3.4, height: 4.6)
+                Ellipse().fill(Palette.ink).frame(width: 3.4, height: 4.6)
+            }.offset(y: -2)
+            HStack(spacing: 14) {
+                Ellipse().fill(Palette.blush.opacity(0.65)).frame(width: 5, height: 3.4)
+                Ellipse().fill(Palette.blush.opacity(0.65)).frame(width: 5, height: 3.4)
+            }.offset(y: 3)
+        }
+        .frame(width: 32, height: 34)
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Empty state
 
 private struct EmptyTodoState: View {
+    var text = "Nothing yet, add something sweet ✨"
     @State private var float = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -492,14 +732,16 @@ private struct EmptyTodoState: View {
             }
             .frame(height: 56)
             .padding(.top, 8)
-            Text("Nothing yet, add something sweet ✨")
+            Text(text)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 6)
                 .font(.mochi(13, .medium))
                 .foregroundStyle(Palette.text.opacity(0.6))
                 .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Nothing yet. Add something sweet.")
+        .accessibilityLabel(text)
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { float = true }

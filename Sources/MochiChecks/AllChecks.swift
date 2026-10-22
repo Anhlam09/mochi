@@ -8,4 +8,5 @@ import MochiCore
     runEngineChecks()
     runChatterChecks()
     runTodoChecks()
+    runBrainChecks()
 }

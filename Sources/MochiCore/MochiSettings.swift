@@ -29,6 +29,10 @@ public final class MochiSettings {
     public var todoNudges: Bool { didSet { defaults.set(todoNudges, forKey: "todoNudges") } }
     /// Show the to-do's text in reminder notifications (off: "You have a to-do now").
     public var todoNotificationText: Bool { didSet { defaults.set(todoNotificationText, forKey: "todoNotificationText") } }
+    /// On-device AI (Apple Intelligence) for kind lines and "Ask Mochi". Does nothing unless the Mac supports it.
+    public var smartMochi: Bool { didSet { defaults.set(smartMochi, forKey: "smartMochi") } }
+    /// How often Mochi offers a kind word on its own (raw value of `Positivity`).
+    public var positivity: String { didSet { defaults.set(positivity, forKey: "positivity") } }
     public var todoWrapUpHour: Int { didSet { defaults.set(todoWrapUpHour, forKey: "todoWrapUpHour") } }
     public var todoWrapUpMinute: Int { didSet { defaults.set(todoWrapUpMinute, forKey: "todoWrapUpMinute") } }
 
@@ -50,11 +54,16 @@ public final class MochiSettings {
         todosEnabled = defaults.object(forKey: "todosEnabled") as? Bool ?? true
         todoNudges = defaults.object(forKey: "todoNudges") as? Bool ?? true
         todoNotificationText = defaults.object(forKey: "todoNotificationText") as? Bool ?? true
+        smartMochi = defaults.object(forKey: "smartMochi") as? Bool ?? true
+        positivity = defaults.string(forKey: "positivity").flatMap(Positivity.init(rawValue:))?.rawValue
+            ?? Positivity.fewTimesADay.rawValue
         todoWrapUpHour = min(23, max(0, defaults.object(forKey: "todoWrapUpHour") as? Int ?? 17))
         todoWrapUpMinute = min(59, max(0, defaults.object(forKey: "todoWrapUpMinute") as? Int ?? 30))
         friendName = defaults.string(forKey: "friendName")
             ?? NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
     }
+
+    public var positivityLevel: Positivity { Positivity(rawValue: positivity) ?? .fewTimesADay }
 
     public var todoAgent: TodoAgentSettings {
         TodoAgentSettings(todosEnabled: todosEnabled, wrapUpHour: todoWrapUpHour,

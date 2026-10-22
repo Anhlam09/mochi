@@ -28,6 +28,9 @@ final class TodoCoordinator {
     private let defaults: UserDefaults
     private var agent: TodoAgent
     private var card: TodoCardController?
+    private let context: AgentContext
+    /// A fresh Ask Mochi conversation per card-open; dropped when the card closes (nothing is kept).
+    private var askMochi: AskMochi?
     let dayClock = DayClock()
     /// The "unreadable list" notice is shown until the card has been opened and closed once.
     private var recoveryPending: Bool
@@ -37,7 +40,8 @@ final class TodoCoordinator {
     static let loopEvery: Duration = .seconds(30)
 
     init(store: TodoStore, engine: TimerEngine, settings: MochiSettings, companion: Companion,
-         nudger: Nudger, defaults: UserDefaults = .standard) {
+         nudger: Nudger, context: AgentContext, defaults: UserDefaults = .standard) {
+        self.context = context
         self.store = store
         self.engine = engine
         self.settings = settings
@@ -152,11 +156,13 @@ final class TodoCoordinator {
     func openCard() {
         guard settings.todosEnabled, let card else { return }
         companion.clearTodoLine()
+        if !card.isVisible { askMochi = settings.smartMochi ? AskMochi(context: context) : nil }
         card.show(items: { [store] in store.todayList(now: Date()) },
                   later: { [store] in store.laterList(now: Date()) },
                   now: { Date() },
                   showMoveToTomorrow: { [weak self] in self?.shouldOfferMoveToTomorrow ?? false },
                   notice: { [weak self] in self?.notice },
+                  ask: { [weak self] in self?.askState },
                   actions: actions)
     }
 
@@ -166,7 +172,18 @@ final class TodoCoordinator {
         if card.isVisible { cardClosed(); card.hide() } else { openCard() }
     }
 
-    private func cardClosed() { recoveryPending = false }
+    private func cardClosed() {
+        recoveryPending = false
+        askMochi?.cancel()
+        askMochi = nil
+    }
+
+    /// What the card's Ask tab shows: nil hides it (Smart Mochi off), a reason when unavailable.
+    private var askState: AskMochiState? {
+        guard settings.smartMochi else { return nil }
+        if let reason = SmartMochi.unavailableReason() { return AskMochiState(unavailableReason: reason) }
+        return askMochi?.state
+    }
 
     /// A short warning inside the card when the list can't be saved or had to be recovered.
     var notice: String? {
@@ -203,7 +220,8 @@ final class TodoCoordinator {
             toggle: { [store] in store.toggle(id: $0, now: Date()) },
             delete: { [store] in store.delete(id: $0) },
             moveUnfinishedToTomorrow: { [store] in store.moveUnfinishedToTomorrow(now: Date()) },
-            close: { [weak self] in self?.cardClosed() }
+            close: { [weak self] in self?.cardClosed() },
+            ask: { [weak self] in self?.askMochi?.ask($0) }
         )
     }
 }

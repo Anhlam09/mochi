@@ -107,6 +107,26 @@ final class Companion {
         }
     }
 
+    /// Nothing is being said right now (no chatter, no to-do line).
+    var isQuiet: Bool { message == nil && todoLine == nil }
+
+    /// A kind line from the positivity policy. To-do lines and chatter win: it is dropped (false) if
+    /// something is already showing, so the caller doesn't use up its slot.
+    @discardableResult
+    func sayPositive(_ line: String) -> Bool {
+        guard isQuiet, settings.chat != .off else { return false }
+        show(line)
+        return true
+    }
+
+    /// The fixed cheer lines (used when the on-device model is off or unavailable). False if not shown.
+    @discardableResult
+    func sayCheer() -> Bool {
+        guard isQuiet, settings.chat != .off else { return false }
+        say(.cheer)
+        return true
+    }
+
     func clearTodoLine() {
         todoClearTask?.cancel()
         todoLine = nil
