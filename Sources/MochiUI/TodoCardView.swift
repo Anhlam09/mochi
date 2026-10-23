@@ -12,7 +12,7 @@ public struct TodoCardActions {
     public var ask: (@MainActor (String) -> Void)?
     /// Adds a to-do on a chosen day (week strip). Falls back to `add` when nil.
     public var addOnDay: (@MainActor (String, Date) -> Void)?
-    /// Clears Mochi's reply so the Ask tab starts over ("↺ Start over").
+    /// Clears Mochi's reply so the Ask tab goes back to the suggestions ("← Back").
     public var resetAsk: (@MainActor () -> Void)?
 
     public init(add: @escaping @MainActor (String) -> Void,
@@ -711,7 +711,7 @@ private struct AskTab: View {
     var focused: FocusState<Bool>.Binding
     let send: (String) -> Void
     let reset: () -> Void
-    /// Set by "Start over" so the reply hides and the chips return immediately, even before the app clears its state.
+    /// Set by "Back" so the reply hides and the chips return immediately, even before the app clears its state.
     @State private var startedOver = false
     @State private var replyHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -740,7 +740,7 @@ private struct AskTab: View {
                 .foregroundStyle(Palette.text.opacity(0.55))
                 .accessibilityLabel("Runs on your Mac, never sent anywhere")
         }
-        // A new question or answer shows again after a "Start over".
+        // A new question or answer shows again after "Back".
         .onChange(of: state.isThinking) { _, thinking in if thinking { startedOver = false } }
         .onChange(of: state.reply) { _, r in if r != nil { startedOver = false } }
     }
@@ -750,7 +750,7 @@ private struct AskTab: View {
             startedOver = true
             reset()
         } label: {
-            Text("↺ Start over")
+            Label("Back", systemImage: "arrow.left")
                 .font(.mochi(12, .semibold))
                 .foregroundStyle(Palette.text.opacity(0.7))
                 .padding(.horizontal, 10).frame(height: 24)
@@ -758,8 +758,8 @@ private struct AskTab: View {
                 .contentShape(RoundedRectangle(cornerRadius: 12, style: .circular))
         }
         .buttonStyle(.plain)
-        .frame(maxWidth: .infinity, alignment: .trailing)
-        .accessibilityLabel("Start over")
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel("Back")
         .accessibilityHint("Clears Mochi's reply and shows the suggestions again")
     }
 
@@ -815,13 +815,8 @@ private struct AskTab: View {
         )
     }
 
-    /// Lunch before 15:00 local time, dinner from 15:00.
-    private var mealChip: String {
-        Calendar.current.component(.hour, from: Date()) < 15 ? "Lunch idea 🥪" : "Dinner idea 🍝"
-    }
-
     private var chips: some View {
-        let all = Self.suggestions + [mealChip]
+        let all = Self.suggestions + ["Lunch idea 🥪", "Dinner idea 🍝"]
         let rows = stride(from: 0, to: all.count, by: 2).map { Array(all[$0..<min($0 + 2, all.count)]) }
         return VStack(spacing: 6) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
