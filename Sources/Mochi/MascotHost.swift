@@ -66,7 +66,7 @@ struct MascotHost: View {
     static func hoverText(for engine: TimerEngine) -> String? {
         let time = MochiApp.format(engine.remaining)
         switch engine.phase {
-        case .idle: return "Tap me to start 🌱"
+        case .idle: return nil
         case .focusing: return "\(time) left"
         case .onBreak: return "Break: \(time)"
         case .snoozed: return "Snoozing: \(time)"
