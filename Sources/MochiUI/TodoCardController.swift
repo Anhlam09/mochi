@@ -85,6 +85,8 @@ public final class TodoCardController {
     private var frameToken: NSObjectProtocol?
     private var mouseMonitors: [Any] = []
     private var closeAction: (@MainActor () -> Void)?
+    /// The app that was in front before the card made Mochi active, so it can be put back on close.
+    private var previousApp: NSRunningApplication?
     private var generation = 0
 
     public var isVisible: Bool { panel?.isVisible ?? false }
@@ -126,7 +128,10 @@ public final class TodoCardController {
         apply(side.rect, to: panel)
         panel.alphaValue = 1
 
-        // Key without activating the app: see the note on `focus(_:)`.
+        // The card makes Mochi the active app while it's open, so dictation tools such as Wispr Flow
+        // (which type into the frontmost app) put their text in the card. The previous app comes back
+        // to the front when the card closes; see `hide(restoreFocus:)`.
+        activateForTyping()
         panel.makeKeyAndOrderFront(nil)
         focus(panel)
 
@@ -151,8 +156,16 @@ public final class TodoCardController {
     }
 
     /// Hides the card (does not call the caller's `close` action).
-    public func hide() {
+    public func hide() { hide(restoreFocus: true) }
+
+    /// `restoreFocus` is false when the user clicked into another app: that app is taking the front
+    /// already, so we must not pull the previous one back over it.
+    private func hide(restoreFocus: Bool) {
         guard let panel else { return }
+        if restoreFocus, NSApp.isActive, let app = previousApp, !app.isTerminated {
+            app.activate()
+        }
+        previousApp = nil
         generation += 1
         removeMonitors()
         if let frameToken { anchor.removeFrameObserver(frameToken); self.frameToken = nil }
@@ -170,10 +183,19 @@ public final class TodoCardController {
     }
 
     /// Esc, the X button or a click outside: hide, then tell the caller.
-    private func dismiss() {
+    private func dismiss(restoreFocus: Bool = true) {
         let close = closeAction
-        hide()
+        hide(restoreFocus: restoreFocus)
         close?()
+    }
+
+    /// Brings Mochi to the front (remembering who was there) so the card's text field is in the
+    /// frontmost app. The card only opens when the user asks for it, so this never happens on its own.
+    private func activateForTyping() {
+        guard !NSApp.isActive else { return }
+        let front = NSWorkspace.shared.frontmostApplication
+        if front?.processIdentifier != ProcessInfo.processInfo.processIdentifier { previousApp = front }
+        NSApp.activate()
     }
 
     // MARK: key focus
@@ -182,7 +204,8 @@ public final class TodoCardController {
     /// `makeKeyAndOrderFront` makes it the key window WITHOUT activating Mochi or pulling the user's
     /// frontmost app out of focus; key events are routed to the key window, so the text field receives
     /// them. SwiftUI's `@FocusState` then puts the caret in the field. If AppKit still reports the panel as
-    /// not key on the next runloop turn (rare), we retry `makeKey()` once. The app is never activated.
+    /// not key on the next runloop turn (rare), we retry `makeKey()` once. (The app is also activated while
+    /// the card is open; see `activateForTyping()`.)
     private func focus(_ panel: TodoCardPanel) {
         DispatchQueue.main.async { [weak self, weak panel] in
             MainActor.assumeIsolated {
@@ -199,7 +222,7 @@ public final class TodoCardController {
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         // Clicks in other apps.
         if let g = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] _ in
-            MainActor.assumeIsolated { self?.dismiss() }
+            MainActor.assumeIsolated { self?.dismiss(restoreFocus: false) }
         }) { mouseMonitors.append(g) }
         // Clicks in our own windows other than the card and the mascot (the mascot's to-do badge toggles
         // the card itself, so it must not be closed-then-reopened here).
