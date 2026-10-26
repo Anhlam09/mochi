@@ -62,6 +62,8 @@ func renderTodoPreviews(into dir: URL) {
         }
 
         let sizesSheet = HStack(alignment: .bottom, spacing: 0) {
+            MascotView(pose: .breakDue, progress: 0.7, bubbleText: "Time to stretch! 🌱", size: .mini, todoBadge: 3, onTodoTap: {})
+            MascotView(pose: .idle, progress: 0.3, bubbleText: nil, size: .mini, todoBadge: 2, onTodoTap: {})
             MascotView(pose: .breakDue, progress: 0.7, bubbleText: "Time to stretch! 🌱", size: .tiny, todoBadge: 3, onTodoTap: {})
             MascotView(pose: .idle, progress: 0.3, bubbleText: nil, size: .tiny, todoBadge: 12, onTodoTap: {})
             MascotView(pose: .breakDue, progress: 0.7, bubbleText: nil, size: .small, todoBadge: 3, onTodoTap: {})

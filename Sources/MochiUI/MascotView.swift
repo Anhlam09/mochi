@@ -410,7 +410,10 @@ public struct MascotView: View {
     }
 
     /// Badge scale: 1.5625x the figure scale (1.25 x 1.25), never below 1.2 so it stays an easy target at Tiny/Small.
-    private static func badgeScale(_ size: MascotSize) -> Double { max(size.scale * 1.5625, 1.2) }
+    /// (Mini keeps it a little smaller so it doesn't outsize Mochi.)
+    private static func badgeScale(_ size: MascotSize) -> Double {
+        size == .mini ? 0.9 : max(size.scale * 1.5625, 1.2)
+    }
 
     /// The badge sits at the mascot's bottom-right, by its feet (top-left coordinates of the window).
     private var badgeRect: CGRect {
