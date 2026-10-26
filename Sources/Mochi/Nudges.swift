@@ -38,6 +38,12 @@ final class Nudger: NSObject, UNUserNotificationCenterDelegate {
     /// (existing users and anyone who already chose are never prompted again).
     func requestPermissionIfNeeded() {
         guard center != nil else { return }
+        Self.askIfNotDetermined()
+    }
+
+    /// Nonisolated on purpose: these completion handlers run on a background queue, and a closure
+    /// written inside this @MainActor class would inherit main-actor isolation and trap there.
+    nonisolated private static func askIfNotDetermined() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             guard settings.authorizationStatus == .notDetermined else { return }
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -65,7 +71,7 @@ final class Nudger: NSObject, UNUserNotificationCenterDelegate {
         content.title = title
         content.body = body
         let ident = "mochi.todo." + (id?.uuidString ?? UUID().uuidString)
-        center.add(UNNotificationRequest(identifier: ident, content: content, trigger: nil)) { _ in }
+        Self.add(UNNotificationRequest(identifier: ident, content: content, trigger: nil), to: center)
         play("Glass")
     }
 
@@ -88,15 +94,23 @@ final class Nudger: NSObject, UNUserNotificationCenterDelegate {
         content.title = title
         content.body = body
         if let category { content.categoryIdentifier = category }
-        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { [weak self] _ in
+        Self.add(UNNotificationRequest(identifier: id, content: content, trigger: nil), to: center) { [weak self] in
             // Race: the phase may have moved on while the request was being delivered.
-            Task { @MainActor in
-                guard let self, id == Self.dueID else { return }
-                switch self.engine.phase {
-                case .breakDue, .snoozed: break
-                default: self.center?.removeDeliveredNotifications(withIdentifiers: [Self.dueID])
-                }
+            guard let self, id == Self.dueID else { return }
+            switch self.engine.phase {
+            case .breakDue, .snoozed: break
+            default: self.center?.removeDeliveredNotifications(withIdentifiers: [Self.dueID])
             }
+        }
+    }
+
+    /// Posts off the main actor: the completion handler runs on a background queue, so it must not be
+    /// a closure that inherits this class's main-actor isolation. `then` hops back to the main actor.
+    nonisolated private static func add(_ request: UNNotificationRequest, to center: UNUserNotificationCenter,
+                                        then: (@MainActor @Sendable () -> Void)? = nil) {
+        center.add(request) { _ in
+            guard let then else { return }
+            Task { @MainActor in then() }
         }
     }
 

@@ -101,9 +101,7 @@ final class VoiceListener {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0 else { throw Failure.failed }
-        input.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
-            backend.append(buffer)
-        }
+        input.installTap(onBus: 0, bufferSize: 2048, format: format, block: Self.tapBlock(feeding: backend))
         engine.prepare()
         try engine.start()
         self.engine = engine
@@ -150,7 +148,15 @@ final class VoiceListener {
         heard = false
     }
 
-    private static func requestMic() async -> Bool {
+    /// The microphone tap runs on a real-time audio thread. It must be built outside the main actor:
+    /// a closure written inside this @MainActor class would inherit main-actor isolation, and Swift's
+    /// runtime check traps when the audio thread calls it (that was the "Mochi disappeared" crash).
+    nonisolated private static func tapBlock(feeding backend: any SpeechBackend) -> AVAudioNodeTapBlock {
+        { buffer, _ in backend.append(buffer) }
+    }
+
+    // Permission callbacks also arrive on background queues, so these are nonisolated too.
+    nonisolated private static func requestMic() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized: return true
         case .notDetermined: return await AVCaptureDevice.requestAccess(for: .audio)
@@ -158,7 +164,7 @@ final class VoiceListener {
         }
     }
 
-    private static func requestSpeech() async -> Bool {
+    nonisolated private static func requestSpeech() async -> Bool {
         switch SFSpeechRecognizer.authorizationStatus() {
         case .authorized: return true
         case .notDetermined:
