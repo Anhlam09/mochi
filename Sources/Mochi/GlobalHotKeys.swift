@@ -12,10 +12,11 @@ final class GlobalHotKeys {
     private var refs: [UInt32: EventHotKeyRef] = [:]
     private var installed = false
 
-    /// Control-Option-M
+    /// Option-M (two keys, easy to hold). It replaces typing "µ" while Mochi's shortcut is on;
+    /// Control-M was avoided because Terminal and others treat it as Return.
     static let talkKeyCode = UInt32(kVK_ANSI_M)
-    static let talkModifiers = UInt32(controlKey | optionKey)
-    static let talkLabel = "⌃⌥M"
+    static let talkModifiers = UInt32(optionKey)
+    static let talkLabel = "⌥M"
 
     @discardableResult
     func register(id: UInt32, keyCode: UInt32, modifiers: UInt32,
