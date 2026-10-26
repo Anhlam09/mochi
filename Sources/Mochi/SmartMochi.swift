@@ -201,6 +201,9 @@ final class AskMochi {
         state = AskMochiState()
     }
 
+    /// Clears the last answer but keeps the model's session (used between turns of a spoken conversation).
+    func clearOutput() { state = AskMochiState(unavailableReason: SmartMochi.unavailableReason()) }
+
     /// "Start over": clears the reply, actions and links, and drops the model session so the next
     /// question isn't mixed with the old ones.
     func reset() {

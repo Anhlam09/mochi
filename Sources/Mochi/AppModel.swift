@@ -60,9 +60,13 @@ final class AppModel {
         todoCoordinator = coordinator
         eventHandlers.append { coordinator.handle($0) }
 
+        let conversation = ConversationCoordinator(settings: settings, companion: companion, context: context)
+        conversation.start()
+        self.conversation = conversation
+
         let panel = FloatingPanelController(
             rootView: MascotHost(engine: engine, settings: settings, companion: companion,
-                                 todos: todos, todoCoordinator: coordinator),
+                                 todos: todos, todoCoordinator: coordinator, conversation: conversation),
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium
         )
         self.panel = panel
@@ -84,6 +88,7 @@ final class AppModel {
     private var panel: FloatingPanelController?
     private var todoCoordinator: TodoCoordinator?
     private var welcome: WelcomeCoordinator?
+    private var conversation: ConversationCoordinator?
     private var extras: ExtrasCoordinator?
     private var positivity: PositivityCoordinator?
 

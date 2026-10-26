@@ -2,7 +2,7 @@ import SwiftUI
 
 /// What Mochi is currently doing. The app maps engine phases to these.
 public enum MascotPose: String, CaseIterable, Sendable {
-    case idle, working, almostDone, breakDue, onBreak, paused, chatting
+    case idle, working, almostDone, breakDue, onBreak, paused, chatting, listening, thinking
 
     public var accessibilityDescription: String {
         switch self {
@@ -13,13 +13,15 @@ public enum MascotPose: String, CaseIterable, Sendable {
         case .onBreak: "Mochi is napping while you take a break"
         case .paused: "Mochi is paused"
         case .chatting: "Mochi is happily talking to you"
+        case .listening: "Mochi is listening to you"
+        case .thinking: "Mochi is thinking"
         }
     }
 
     /// Ring colour associated with this pose.
     public var ringTint: Color {
         switch self {
-        case .idle, .working, .almostDone, .chatting: Palette.focusRing
+        case .idle, .working, .almostDone, .chatting, .listening, .thinking: Palette.focusRing
         case .breakDue, .onBreak: Palette.breakRing
         case .paused: Palette.ink.opacity(0.35)
         }

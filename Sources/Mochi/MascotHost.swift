@@ -10,22 +10,30 @@ struct MascotHost: View {
     let companion: Companion
     let todos: TodoStore
     let todoCoordinator: TodoCoordinator
+    let conversation: ConversationCoordinator
 
     var body: some View {
         let todoLine = companion.todoLine
+        let talk = conversation
+        let basePose = Self.pose(for: engine, talking: todoLine != nil || companion.conversationText != nil
+                                 || (Self.bubble(for: engine) == nil && companion.message != nil))
         MascotView(
-            pose: Self.pose(for: engine, talking: todoLine != nil || (Self.bubble(for: engine) == nil && companion.message != nil)),
+            pose: talk.isThinking ? .thinking : talk.isListening ? .listening : basePose,
             progress: engine.progress,
-            bubbleText: todoLine ?? Self.bubble(for: engine) ?? companion.message,
+            bubbleText: companion.conversationText ?? todoLine ?? Self.bubble(for: engine) ?? companion.message,
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium,
             hoverText: Self.hoverText(for: engine),
             // Low Power Mode always gets the low-CPU animation.
             calm: settings.calmMode || ProcessInfo.processInfo.isLowPowerModeEnabled,
             flavor: MochiFlavor(rawValue: settings.flavor) ?? .strawberry,
-            onTap: { Self.handleTap(engine, companion: companion) },
+            onTap: { if talk.isActive { talk.interrupt() } else { Self.handleTap(engine, companion: companion) } },
             onHoverStart: { companion.hovered() },
             todoBadge: settings.todosEnabled ? Self.leftToday(todos, todoCoordinator) : nil,
-            onTodoTap: { todoCoordinator.toggleCard() }
+            onTodoTap: { todoCoordinator.toggleCard() },
+            listening: talk.isListening && talk.showsListeningPrompt,
+            liveText: talk.isListening ? talk.liveText : nil,
+            onHoldStart: { talk.holdStart() },
+            onHoldEnd: { talk.holdEnd() }
         )
     }
 

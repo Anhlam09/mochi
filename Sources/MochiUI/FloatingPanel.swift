@@ -37,6 +37,8 @@ final class PanelMetrics: ObservableObject {
     @Published var hitRects: [CGRect] = []
     /// The most recent left mouse-down delivered to the hosting view.
     var lastMouseDown: NSEvent?
+    /// True while Mochi is held or listening: the window must not start a drag.
+    var dragLocked = false
 
     func accepts(windowPointTopLeft p: CGPoint) -> Bool {
         hitRects.isEmpty || hitRects.contains { $0.insetBy(dx: -2, dy: -2).contains(p) }
@@ -71,11 +73,12 @@ private struct DragHandle<Content: View>: View {
             .onPreferenceChange(HitRectsKey.self) { rects in
                 Task { @MainActor in metrics.hitRects = rects }
             }
+            .environment(\.mochiDragLock, DragLock(set: { locked in metrics.dragLocked = locked }))
             .environment(\.mochiPanelState, PanelState(isActive: metrics.isActive, dragEpoch: metrics.dragEpoch))
             .simultaneousGesture(
                 DragGesture(minimumDistance: PanelMetrics.dragThreshold, coordinateSpace: .global)
                     .onChanged { _ in
-                        guard !dragging else { return }
+                        guard !dragging, !metrics.dragLocked else { return }
                         dragging = true
                         onDragStart() // runs the system window-drag loop until mouse-up
                         dragging = false

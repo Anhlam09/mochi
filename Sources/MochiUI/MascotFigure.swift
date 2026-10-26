@@ -135,6 +135,18 @@ struct Motion {
         case .paused:
             m.sy = 0.92
             m.sx = 1.06
+        case .listening:
+            let b = sin(tau * t / 2.4)
+            m.sy = 1 + 0.02 * b
+            m.sx = 1 - 0.01 * b
+            m.sway = 3 * sin(tau * t / 1.1)
+            m.eyeOpen = blink(blinkT)
+        case .thinking:
+            let b = sin(tau * t / 3)
+            m.sy = 1 + 0.02 * b
+            m.sx = 1 - 0.01 * b
+            m.sway = 4 * sin(tau * t / 2.2)
+            m.eyeOpen = blink(blinkT)
         case .chatting:
             // `t` counts from when Mochi started talking: chatter for a moment, then a happy smile.
             let b = sin(tau * t / 1.2)
@@ -211,7 +223,7 @@ struct BlushGroup: View, Equatable {
         let y = Face.eyeY(pose) + 14
         ZStack {
             ForEach([20.0, 96.0], id: \.self) { x in
-                Ellipse().fill(flavor.blush.opacity(hover ? 1 : 0.8))
+                Ellipse().fill(flavor.blush.opacity(hover || pose == .listening ? 1 : 0.8))
                     .frame(width: 18, height: 11)
                     .blur(radius: 0.6)
                     .position(x: x, y: y)
@@ -230,7 +242,10 @@ struct EyesGroup: View, Equatable {
         let kind: EyeKind
         var scale = 1.0
         var dy = 0.0
+        var dx = 0.0
         switch pose {
+        case .listening: kind = .round; scale = 1.18
+        case .thinking: kind = .round; scale = 0.95; dx = 5; dy = -3.5
         case .idle: kind = .round
         case .working: kind = .round; scale = 0.82
         case .almostDone: kind = .half; dy = 1
@@ -240,8 +255,8 @@ struct EyesGroup: View, Equatable {
         case .chatting: kind = .happy
         }
         return ZStack {
-            EyeView(kind: kind, open: open, scale: scale).position(x: Face.lx, y: y + dy)
-            EyeView(kind: kind, open: open, scale: scale).position(x: Face.rx, y: y + dy)
+            EyeView(kind: kind, open: open, scale: scale).position(x: Face.lx + dx, y: y + dy)
+            EyeView(kind: kind, open: open, scale: scale).position(x: Face.rx + dx, y: y + dy)
         }
         .frame(width: Face.bw, height: Face.bh)
     }
@@ -282,6 +297,10 @@ struct MouthGroup: View, Equatable {
                 Ellipse().fill(Palette.ink).frame(width: 4, height: 3.4).position(x: 58, y: y + 13)
             case .paused:
                 Capsule().fill(Palette.ink).frame(width: 7, height: 2.2).position(x: 58, y: y + 13)
+            case .listening:
+                Ellipse().fill(Palette.ink).frame(width: 5, height: 5.2).position(x: 58, y: y + 13)
+            case .thinking:
+                Capsule().fill(Palette.ink).frame(width: 6, height: 2.2).position(x: 62, y: y + 13)
             case .chatting:
                 // `yawn` is how open the smile is while talking (1 = full smile).
                 ZStack {
@@ -334,8 +353,11 @@ private struct SproutSlot: View {
     var pose: MascotPose
     var rotation: Double
     var flavor: MochiFlavor = .strawberry
+    /// Vertical stretch of the sprout (perked up while listening).
+    var lift: Double = 1
     var body: some View {
         SproutLeaves(drooped: pose == .paused, flavor: flavor).equatable()
+            .scaleEffect(x: 1, y: lift, anchor: .bottom)
             .rotationEffect(.degrees(rotation), anchor: .bottom)
             .position(x: Face.bw / 2, y: 5 - 18)
             .frame(width: Face.bw, height: Face.bh)
@@ -373,6 +395,7 @@ public struct MascotFigure: View {
         let s = max(0, min(1, squish))
         let leaning = hover && !reduceMotion
         ZStack {
+            if pose == .listening { SoundRing(t: t) }
             ShadowLayer(air: 0, wide: pose == .paused).equatable()
                 .scaleEffect(1 - 0.28 * m.air, anchor: UnitPoint(x: 0.5, y: 141.0 / 150))
                 .opacity(1 - 0.3 * m.air)
@@ -382,6 +405,7 @@ public struct MascotFigure: View {
                 .offset(y: m.dy)
                 .position(x: 100, y: groundY - Face.bh / 2)
             if pose == .breakDue { twinkles }
+            if pose == .thinking { ThinkingDots(t: t) }
             if pose == .onBreak { ZFloat(p: t / 3.6) }
             if celebrate > 0 { SparkleBurst(c: celebrate) }
         }
@@ -398,7 +422,8 @@ public struct MascotFigure: View {
     private func bodyGroup(_ m: Motion) -> some View {
         let star = Int(floor(t / 1.8)) % 2 == 1
         return ZStack {
-            SproutSlot(pose: pose, rotation: pose == .paused ? 14 : m.sway, flavor: flavor)
+            SproutSlot(pose: pose, rotation: pose == .paused ? 14 : m.sway, flavor: flavor,
+                       lift: pose == .listening ? 1.14 + 0.06 * sin(2 * .pi * t / 0.9) : 1)
             StaticBody(flavor: flavor).equatable()
             BlushGroup(pose: pose, hover: hover, flavor: flavor).equatable()
             EyesGroup(pose: pose, open: m.eyeOpen, star: star).equatable()
@@ -425,6 +450,45 @@ extension Motion {
         let land = c > 0.5 ? sin(.pi * min((c - 0.5) / 0.2, 1)) : 0
         sy -= 0.08 * land; sx += 0.05 * land
         air = max(air, sin(.pi * hp))
+    }
+}
+
+/// Soft lavender sound ripples around Mochi's base while listening (about 1 pulse per second).
+struct SoundRing: View {
+    var t: Double
+    var body: some View {
+        ZStack {
+            ForEach(0..<2, id: \.self) { k in
+                let q = (t / 1.0 + Double(k) * 0.5).truncatingRemainder(dividingBy: 1)
+                Ellipse()
+                    .stroke(Palette.focusRing, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .frame(width: 124, height: 22)
+                    .scaleEffect(0.8 + 0.4 * q)
+                    .opacity(0.6 * (1 - q))
+                    .position(x: 100, y: 138)
+            }
+        }
+        .frame(width: 200, height: 150)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Three tiny dots floating above the sprout while Mochi thinks.
+struct ThinkingDots: View {
+    var t: Double
+    static let spots: [CGPoint] = [CGPoint(x: 114, y: 19), CGPoint(x: 126, y: 12), CGPoint(x: 138, y: 8)]
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { i in
+                let w = max(0, sin(2 * .pi * (t / 1.2 - Double(i) * 0.18)))
+                Circle().fill(Palette.focusRing)
+                    .frame(width: 5.5, height: 5.5)
+                    .opacity(0.45 + 0.55 * w)
+                    .position(x: Self.spots[i].x, y: Self.spots[i].y - 3 * w)
+            }
+        }
+        .frame(width: 200, height: 150)
+        .accessibilityHidden(true)
     }
 }
 
@@ -523,6 +587,7 @@ private struct CalmParts {
     var shadow: CGImage?, sprout: CGImage?, body: CGImage?, blush: CGImage?, blushStrong: CGImage?
     var eyes: CGImage?, eyesStar: CGImage?, mouth: CGImage?, mouthOpen: CGImage?, arm: CGImage?
     var twinkles: [CGImage?] = [], zs: [CGImage?] = []
+    var ring: CGImage?, dots: [CGImage?] = []
 }
 
 @MainActor
@@ -549,7 +614,8 @@ private enum CalmImageCache {
         if let c = cache[key] { return c }
         var p = CalmParts()
         p.shadow = render(ShadowLayer(air: 0, wide: pose == .paused), scheme: scheme)
-        p.sprout = render(inBody(SproutSlot(pose: pose, rotation: pose == .paused ? 14 : 0, flavor: flavor)), scheme: scheme)
+        p.sprout = render(inBody(SproutSlot(pose: pose, rotation: pose == .paused ? 14 : 0, flavor: flavor,
+                                      lift: pose == .listening ? 1.14 : 1)), scheme: scheme)
         p.body = render(inBody(StaticBody(flavor: flavor)), scheme: scheme)
         p.blush = render(inBody(BlushGroup(pose: pose, hover: false, flavor: flavor)), scheme: scheme)
         p.blushStrong = render(inBody(BlushGroup(pose: pose, hover: true, flavor: flavor)), scheme: scheme)
@@ -564,6 +630,13 @@ private enum CalmImageCache {
                 (CGPoint(x: 40, y: 22), 9, Palette.peach)]
             p.twinkles = spots.map { sp in
                 render(SparkleShape().fill(sp.2).frame(width: sp.1, height: sp.1).position(sp.0), scheme: scheme)
+            }
+        case .listening:
+            p.ring = render(Ellipse().stroke(Palette.focusRing, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .frame(width: 124, height: 22).position(x: 100, y: 138), scheme: scheme)
+        case .thinking:
+            p.dots = ThinkingDots.spots.map { sp in
+                render(Circle().fill(Palette.focusRing).frame(width: 5.5, height: 5.5).position(sp), scheme: scheme)
             }
         case .almostDone:
             p.mouthOpen = render(inBody(MouthGroup(pose: pose, yawn: 1, flavor: flavor)), scheme: scheme)
@@ -640,6 +713,10 @@ final class CalmLayerHost: NSView {
 
         let still = pose == .paused
         let shadow = part(parts.shadow, anchor: CGPoint(x: 100, y: 141))
+        var ringLayers: [CALayer] = []
+        if pose == .listening {
+            for _ in 0..<2 { let l = part(parts.ring, anchor: CGPoint(x: 100, y: 138)); root.addSublayer(l); ringLayers.append(l) }
+        }
         root.addSublayer(shadow)
 
         // lean (hover) > squish/celebrate > stretch (yawn) > breath > bounce > parts
@@ -674,6 +751,8 @@ final class CalmLayerHost: NSView {
         var twinkleLayers: [CALayer] = []
         let tw: [CGPoint] = [CGPoint(x: 28, y: 52), CGPoint(x: 178, y: 36), CGPoint(x: 40, y: 22)]
         for (i, img) in parts.twinkles.enumerated() { let l = part(img, anchor: tw[i]); root.addSublayer(l); twinkleLayers.append(l) }
+        var dotLayers: [CALayer] = []
+        for (i, img) in parts.dots.enumerated() { let l = part(img, anchor: ThinkingDots.spots[i]); root.addSublayer(l); dotLayers.append(l) }
         var zLayers: [CALayer] = []
         for img in parts.zs { let l = part(img, anchor: CGPoint(x: 150, y: 62)); root.addSublayer(l); zLayers.append(l) }
 
@@ -685,6 +764,8 @@ final class CalmLayerHost: NSView {
         case .almostDone: (breathAmp, breathHalf, swayDeg, swayHalf) = (0.03, 2.25, 3, 1.7)
         case .onBreak: (breathAmp, breathHalf, swayDeg, swayHalf) = (0.04, 2.5, 3, 2)
         case .breakDue: (breathAmp, breathHalf, swayDeg, swayHalf) = (0, 1, 9, 0.5)
+        case .listening: (breathAmp, breathHalf, swayDeg, swayHalf) = (0.02, 1.2, 3, 0.55)
+        case .thinking: (breathAmp, breathHalf, swayDeg, swayHalf) = (0.02, 1.5, 4, 1.1)
         default: (breathAmp, breathHalf, swayDeg, swayHalf) = (0.025, 1.5, pose == .idle ? 6 : 3.5, 1.3)
         }
         if breathAmp > 0 {
@@ -694,7 +775,7 @@ final class CalmLayerHost: NSView {
         sprout.add(Self.loop("transform.rotation.z", from: swayDeg * .pi / 180, to: -swayDeg * .pi / 180, half: swayHalf), forKey: "sway")
 
         // blink: one quick squash every ~4.6 s
-        if pose == .idle || pose == .working || pose == .almostDone {
+        if pose == .idle || pose == .working || pose == .almostDone || pose == .listening || pose == .thinking {
             eyes.add(Self.keyframes("transform.scale.y", values: [1, 1, 0.08, 1], times: [0, 0.955, 0.975, 1], duration: 4.6), forKey: "blink")
         }
         switch pose {
@@ -733,6 +814,23 @@ final class CalmLayerHost: NSView {
                 g.timeOffset = Double(k) * d / 3
                 l.opacity = 0
                 l.add(g, forKey: "z")
+            }
+        case .listening:
+            sprout.add(Self.loop("transform.scale.y", from: 0.95, to: 1.06, half: 0.45), forKey: "perk")
+            for (k, l) in ringLayers.enumerated() {
+                let sc = Self.keyframes("transform.scale", values: [0.8, 1.2], times: [0, 1], duration: 1.0)
+                let op = Self.keyframes("opacity", values: [0.6, 0], times: [0, 1], duration: 1.0)
+                let g = CAAnimationGroup()
+                g.animations = [sc, op]
+                g.duration = 1.0; g.repeatCount = .infinity
+                g.timeOffset = Double(k) * 0.5
+                l.opacity = 0
+                l.add(g, forKey: "ring")
+            }
+        case .thinking:
+            for (i, l) in dotLayers.enumerated() {
+                l.add(Self.loop("transform.translation.y", from: 0, to: 3, half: 0.6, delay: 0.18 * Double(i)), forKey: "dot")
+                l.add(Self.loop("opacity", from: 0.45, to: 1, half: 0.6, delay: 0.18 * Double(i)), forKey: "dop")
             }
         case .chatting:
             bounce.add(Self.loop("transform.translation.y", from: 0, to: 3, half: 0.3), forKey: "bob")

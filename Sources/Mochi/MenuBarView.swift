@@ -165,6 +165,8 @@ struct MenuBarView: View {
 
                 extrasSection
 
+                talkSection
+
                 Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -255,6 +257,28 @@ struct MenuBarView: View {
                     Text("Every 30 min").tag(30)
                     Text("Every hour").tag(60)
                 }
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .font(.system(.callout, design: .rounded))
+            .padding(.top, 4)
+        }
+        .font(.system(.callout, design: .rounded))
+    }
+
+    @ViewBuilder private var talkSection: some View {
+        @Bindable var settings = settings
+        DisclosureGroup("Talk to Mochi 🎧") {
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Talk to Mochi", isOn: $settings.talkEnabled)
+                if settings.talkEnabled {
+                    Toggle("Hold Mochi to talk", isOn: $settings.talkHoldEnabled)
+                    Toggle("Shortcut \(GlobalHotKeys.talkLabel)", isOn: $settings.talkShortcutEnabled)
+                }
+                Text("Listens only when you ask. Everything stays on your Mac.")
+                    .font(.system(.caption2, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .toggleStyle(.switch)
             .controlSize(.small)

@@ -95,6 +95,24 @@ func renderTodoPreviews(into dir: URL) {
         snapshot(TodoCardView(items: [], now: now, actions: actionsDay, showMoveToTomorrow: false, week: emptyToday),
                  name: "todo_week_today_empty_\(mode)", dark: dark, dir: dir)
 
+        let voice = HStack(alignment: .bottom, spacing: 0) {
+            MascotView(pose: .idle, progress: 0.3, bubbleText: nil, size: .tiny, listening: true, onHoldStart: {})
+            MascotView(pose: .idle, progress: 0.3, bubbleText: nil, size: .tiny, listening: true,
+                       liveText: "remind me to call mom at three and also buy milk", onHoldStart: {})
+            MascotView(pose: .thinking, progress: 0.3, bubbleText: nil, size: .tiny)
+            MascotView(pose: .chatting, progress: 0.3, bubbleText: "Sure! I added 'call mom' for 3:00 PM and put milk on your list 🥛", size: .tiny)
+            MascotView(pose: .idle, progress: 0.3, bubbleText: nil, size: .medium, listening: true, onHoldStart: {})
+            MascotView(pose: .idle, progress: 0.3, bubbleText: nil, size: .medium, listening: true,
+                       liveText: "remind me to call mom at three", onHoldStart: {})
+            MascotView(pose: .thinking, progress: 0.3, bubbleText: nil, size: .medium)
+            MascotView(pose: .chatting, progress: 0.3, bubbleText: "Sure! I added 'call mom' for 3:00 PM and put milk on your list 🥛", size: .medium)
+        }
+        snapshot(voice, name: "mascot_voice_\(mode)", dark: dark, dir: dir, pad: 8)
+        snapshot(HStack(spacing: 0) {
+            MascotView(pose: .idle, progress: 0.3, bubbleText: nil, size: .tiny, calm: true, listening: true)
+            MascotView(pose: .thinking, progress: 0.3, bubbleText: nil, size: .tiny, calm: true)
+        }, name: "mascot_voice_calm_\(mode)", dark: dark, dir: dir, pad: 8)
+
         let badges = HStack(spacing: 0) {
             ForEach([3, 12, 0], id: \.self) { n in
                 MascotView(pose: .idle, progress: 0.3, bubbleText: n == 12 ? "You have 12 to-dos 🌱" : nil,

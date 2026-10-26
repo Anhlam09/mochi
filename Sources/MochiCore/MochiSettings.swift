@@ -46,6 +46,10 @@ public final class MochiSettings {
     public var mealIdeas: String { didSet { defaults.set(mealIdeas, forKey: "mealIdeas") } }
     /// Minutes between self-care nudges; 0 is off.
     public var selfCareMinutes: Int { didSet { defaults.set(selfCareMinutes, forKey: "selfCareMinutes") } }
+    // Talk to Mochi (on-device speech only)
+    public var talkEnabled: Bool { didSet { defaults.set(talkEnabled, forKey: "talkEnabled") } }
+    public var talkHoldEnabled: Bool { didSet { defaults.set(talkHoldEnabled, forKey: "talkHoldEnabled") } }
+    public var talkShortcutEnabled: Bool { didSet { defaults.set(talkShortcutEnabled, forKey: "talkShortcutEnabled") } }
     /// The first-launch welcome has been shown (or was not needed). Once per install.
     public var hasWelcomed: Bool { didSet { defaults.set(hasWelcomed, forKey: "hasWelcomed") } }
     /// True if any setting was already stored when this object was created, i.e. Mochi has run here before.
@@ -53,7 +57,7 @@ public final class MochiSettings {
 
     private static let installMarkers = ["presetID", "customFocusMinutes", "customBreakMinutes", "soundEnabled", "showMascot",
                                          "autoStart", "mascotSize", "calmMode", "chatLevel", "friendName", "flavor",
-                                         "flavorRotation", "wakeGreeting", "goodNight", "goodNightHour", "mealIdeas", "selfCareMinutes", "todosEnabled", "todoNudges", "smartMochi", "positivity"]
+                                         "flavorRotation", "wakeGreeting", "goodNight", "goodNightHour", "mealIdeas", "selfCareMinutes", "talkEnabled", "talkHoldEnabled", "talkShortcutEnabled", "todosEnabled", "todoNudges", "smartMochi", "positivity"]
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -64,6 +68,9 @@ public final class MochiSettings {
         mealIdeas = defaults.string(forKey: "mealIdeas").flatMap(MealMode.init(rawValue:))?.rawValue ?? MealMode.any.rawValue
         let care = defaults.object(forKey: "selfCareMinutes") as? Int ?? 60
         selfCareMinutes = SelfCare.options.contains(care) ? care : 60
+        talkEnabled = defaults.object(forKey: "talkEnabled") as? Bool ?? true
+        talkHoldEnabled = defaults.object(forKey: "talkHoldEnabled") as? Bool ?? true
+        talkShortcutEnabled = defaults.object(forKey: "talkShortcutEnabled") as? Bool ?? true
         hasWelcomed = defaults.object(forKey: "hasWelcomed") as? Bool ?? false
         let stored = defaults.string(forKey: "presetID") ?? "gentle"
         presetID = (stored == "custom" || Preset.preset(id: stored) != nil) ? stored : "gentle"

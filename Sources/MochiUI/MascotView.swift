@@ -26,6 +26,8 @@ public struct ProgressRing: View {
 
 /// Rounded speech bubble with a tail pointing down at the mascot.
 public struct SpeechBubble: View {
+    /// Marks a line as the live transcript (italic, muted, 🎧 prefix). Stripped before display.
+    static let livePrefix = "\u{1}"
     public var text: String
     var maxWidth: CGFloat = 216
     @State private var shown = false
@@ -35,11 +37,14 @@ public struct SpeechBubble: View {
     init(text: String, maxWidth: CGFloat) { self.text = text; self.maxWidth = maxWidth }
 
     public var body: some View {
-        Text(text)
-            .font(.mochi(13))
-            .foregroundStyle(Palette.text)
+        let live = text.hasPrefix(Self.livePrefix)
+        let line = live ? String(text.dropFirst(Self.livePrefix.count)) : text
+        Text(line)
+            .font(live ? .mochi(13, .medium).italic() : .mochi(13))
+            .foregroundStyle(Palette.text.opacity(live ? 0.72 : 1))
             .multilineTextAlignment(.center)
             .lineLimit(3)
+            .truncationMode(live ? .head : .tail)
             .minimumScaleFactor(0.9)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 14)
@@ -57,7 +62,7 @@ public struct SpeechBubble: View {
             .onAppear {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) { shown = true }
             }
-            .accessibilityLabel(text)
+            .accessibilityLabel(line)
     }
 }
 
@@ -111,6 +116,19 @@ extension EnvironmentValues {
     var mochiPanelState: PanelState {
         get { self[PanelStateKey.self] }
         set { self[PanelStateKey.self] = newValue }
+    }
+}
+
+/// Lets the mascot lock/unlock window dragging (held or listening). Provided by the floating panel.
+struct DragLock {
+    var set: @MainActor (Bool) -> Void = { _ in }
+    @MainActor func callAsFunction(_ locked: Bool) { set(locked) }
+}
+private struct DragLockKey: EnvironmentKey { static let defaultValue = DragLock() }
+extension EnvironmentValues {
+    var mochiDragLock: DragLock {
+        get { self[DragLockKey.self] }
+        set { self[DragLockKey.self] = newValue }
     }
 }
 
@@ -222,7 +240,7 @@ public struct MascotScene: View {
             if let bubbleText, !bubbleText.isEmpty {
                 SpeechBubble(text: bubbleText, maxWidth: min(216, (win.width - 4) / bs))
                     .background(GeometryReader { g in Color.clear.preference(key: BubbleSizeKey.self, value: g.size) })
-                    .id(bubbleText)
+                    .id(bubbleText.hasPrefix(SpeechBubble.livePrefix) ? "live" : bubbleText)
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.7, anchor: .bottom).combined(with: .opacity))
                     .scaleEffect(bs, anchor: .bottom)
                     .padding(.bottom, (baseH - 12) * s)
@@ -272,6 +290,20 @@ public struct MascotView: View {
     public var todoBadge: Int?
     /// Called when the 📝 badge is tapped.
     public var onTodoTap: (() -> Void)?
+    /// True while Mochi is listening (voice chat): the listening pose, and no window drags.
+    public var listening: Bool
+    /// The live transcript of what the user is saying; nil when not showing one.
+    public var liveText: String?
+    /// Called when the figure is pressed and held still for 0.4 s.
+    public var onHoldStart: (() -> Void)?
+    /// Called when that hold ends (mouse released).
+    public var onHoldEnd: (() -> Void)?
+
+    @State private var holdTask: Task<Void, Never>?
+    @State private var holdBegan = false
+    @State private var holding = false
+    @State private var justHeld = false
+    @Environment(\.mochiDragLock) private var dragLock
 
     @State private var spinCount = 0
     /// Flavour shown before the swap point of the current (or last) spin.
@@ -291,7 +323,13 @@ public struct MascotView: View {
                 size: MascotSize = .medium, hoverText: String? = nil, calm: Bool = false,
                 flavor: MochiFlavor = .strawberry,
                 onTap: (() -> Void)? = nil, onHoverStart: (() -> Void)? = nil,
-                todoBadge: Int? = nil, onTodoTap: (() -> Void)? = nil) {
+                todoBadge: Int? = nil, onTodoTap: (() -> Void)? = nil,
+                listening: Bool = false, liveText: String? = nil,
+                onHoldStart: (() -> Void)? = nil, onHoldEnd: (() -> Void)? = nil) {
+        self.listening = listening
+        self.liveText = liveText
+        self.onHoldStart = onHoldStart
+        self.onHoldEnd = onHoldEnd
         self.todoBadge = todoBadge
         self.onTodoTap = onTodoTap
         self.flavor = flavor
@@ -306,13 +344,21 @@ public struct MascotView: View {
         self.onTap = onTap
     }
 
-    private var effectivePose: MascotPose { MochiDebug.poseOverride ?? pose }
+    private var effectivePose: MascotPose { MochiDebug.poseOverride ?? (listening ? .listening : pose) }
+
+    /// The bubble to show: the live transcript (or the listening prompt) wins over Mochi's own line.
+    private var displayBubble: String? {
+        let live = (liveText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !live.isEmpty { return SpeechBubble.livePrefix + "🎧 " + live }
+        if listening { return SpeechBubble.livePrefix + "I'm listening… 🎧" }
+        return bubbleText
+    }
     private var isCalm: Bool { MochiDebug.calmOverride ?? calm }
 
     /// 30 fps for lively poses, 15 fps for calm ones.
     private var frameInterval: Double {
         switch effectivePose {
-        case .working, .almostDone, .breakDue, .chatting: 1.0 / 30
+        case .working, .almostDone, .breakDue, .chatting, .listening, .thinking: 1.0 / 30
         case .idle, .paused, .onBreak: 1.0 / 15
         }
     }
@@ -350,9 +396,14 @@ public struct MascotView: View {
             if old == .onBreak, new == .working || new == .chatting, !reduceMotion { celebrateCount += 1 }
         }
         .onTapGesture {
+            // A press that turned into a hold must not also count as a tap on release.
+            guard !justHeld else { return }
             tapCount += 1
             onTap?()
         }
+        .simultaneousGesture(holdGesture)
+        .onChange(of: listening) { _, on in dragLock(on || holding) }
+        .onChange(of: panelState.dragEpoch) { cancelHold() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(.isButton)
@@ -389,15 +440,75 @@ public struct MascotView: View {
         }
     }
 
+    // MARK: press-and-hold
+
+    /// Pressing the figure and keeping the pointer within the drag threshold for 0.4 s starts a hold.
+    /// This is a plain DragGesture(minimumDistance: 0) so we know where the press started (only the
+    /// figure counts, not the bubble or the badge) and how far it has moved. It runs alongside, not
+    /// instead of, the tap gesture and the panel's window-drag gesture:
+    ///  - a quick click ends before 0.4 s: no hold, the normal tap fires;
+    ///  - moving more than the threshold before 0.4 s cancels the hold timer, and the panel's own drag
+    ///    (which starts at the same 6 pt) runs performDrag as before;
+    ///  - once the hold fires we lock window drags (`dragLock`), so moving while held or listening
+    ///    never drags the window. The lock lifts on release unless Mochi is still listening.
+    private var holdGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { v in
+                guard onHoldStart != nil else { return }
+                if !holdBegan {
+                    holdBegan = true
+                    guard figureRect.contains(v.startLocation) else { return }
+                    holdTask = Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 400_000_000)
+                        guard !Task.isCancelled, holdBegan else { return }
+                        holding = true
+                        justHeld = true
+                        tapCount += 1 // squish feedback
+                        dragLock(true)
+                        onHoldStart?()
+                    }
+                } else if !holding, hypot(v.translation.width, v.translation.height) > PanelMetrics.dragThreshold {
+                    holdTask?.cancel(); holdTask = nil
+                }
+            }
+            .onEnded { _ in
+                let wasHolding = holding
+                cancelHold()
+                if wasHolding { onHoldEnd?() }
+            }
+    }
+
+    private func cancelHold() {
+        holdTask?.cancel(); holdTask = nil
+        holdBegan = false
+        if holding {
+            holding = false
+            dragLock(listening)
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                justHeld = false
+            }
+        }
+    }
+
+    /// The figure block in window coordinates (top-left origin), as in `MascotScene`'s hit rects.
+    private var figureRect: CGRect {
+        let win = MascotScene.size(for: size), sc = size.scale
+        let figW = 180 * sc, figH = 142 * sc
+        return CGRect(x: (win.width - figW) / 2, y: win.height - figH, width: figW, height: figH)
+    }
+
     private var accessibilityText: String {
-        if let bubbleText, !bubbleText.isEmpty { return "\(effectivePose.accessibilityDescription). \(bubbleText)" }
+        if let bubbleText = displayBubble, !bubbleText.isEmpty {
+            return "\(effectivePose.accessibilityDescription). \(bubbleText.replacingOccurrences(of: SpeechBubble.livePrefix, with: ""))"
+        }
         return effectivePose.accessibilityDescription
     }
 
     @ViewBuilder
     private func scene(t: Double, blinkT: Double, calm: Bool) -> some View {
         let hoverText = hover ? self.hoverText : nil
-        let (pose, progress, bubbleText, hover, size) = (effectivePose, self.progress, self.bubbleText, self.hover, self.size)
+        let (pose, progress, bubbleText, hover, size) = (effectivePose, self.progress, self.displayBubble, self.hover, self.size)
         if reduceMotion {
             MascotScene(pose: pose, progress: progress, bubbleText: bubbleText, t: t, blinkT: blinkT,
                         hover: hover, squish: 0, size: size, hoverText: hoverText, celebrate: 0, calm: false)

@@ -116,7 +116,7 @@ final class TodoCoordinator {
     // MARK: Agent
 
     private func evaluate(event: EngineEvent?) {
-        guard settings.todosEnabled else { return }
+        guard settings.todosEnabled, !companion.conversationActive else { return }
         let now = Date()
         // Bubbles need Mochi on screen and someone in front of it; reminders still notify when away.
         let active = settings.showMascot && !Self.userAway

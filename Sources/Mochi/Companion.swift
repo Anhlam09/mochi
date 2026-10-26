@@ -133,7 +133,29 @@ final class Companion {
     }
 
     /// Nothing is being said right now (no chatter, no to-do line).
-    var isQuiet: Bool { message == nil && todoLine == nil }
+    var isQuiet: Bool { message == nil && todoLine == nil && !conversationActive }
+
+    // MARK: Talk to Mochi
+
+    /// True while a voice conversation is going: chatter, extras and to-do lines wait.
+    private(set) var conversationActive = false
+    /// Mochi's current words in the conversation (the answer, or "Hmm… 💭").
+    private(set) var conversationText: String?
+
+    func beginConversation() {
+        conversationActive = true
+        clearTodoLine()
+        message = nil
+    }
+
+    func setConversationText(_ text: String?) { conversationText = text }
+
+    /// Ends the conversation; `linger` (a farewell, or the last answer) stays for `seconds`.
+    func endConversation(linger: String?, seconds: TimeInterval) {
+        conversationActive = false
+        conversationText = nil
+        if let linger { sayNotice(linger, seconds: seconds) }
+    }
 
     /// A kind line from the positivity policy. To-do lines and chatter win: it is dropped (false) if
     /// something is already showing, so the caller doesn't use up its slot.
@@ -184,7 +206,7 @@ final class Companion {
     @ObservationIgnored private(set) var lastLineAt: Date?
 
     private func show(_ line: String) {
-        guard todoLine == nil else { return }
+        guard todoLine == nil, !conversationActive else { return }
         let now = Date()
         lastLineAt = now
         message = line

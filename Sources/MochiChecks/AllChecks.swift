@@ -10,4 +10,5 @@ import MochiCore
     runTodoChecks()
     runBrainChecks()
     runExtrasChecks()
+    runConversationChecks()
 }
