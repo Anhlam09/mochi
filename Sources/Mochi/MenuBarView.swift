@@ -273,7 +273,7 @@ struct MenuBarView: View {
                 Toggle("Talk to Mochi", isOn: $settings.talkEnabled)
                 if settings.talkEnabled {
                     Toggle("Hold Mochi to talk", isOn: $settings.talkHoldEnabled)
-                    Toggle("Shortcut \(GlobalHotKeys.talkLabel)", isOn: $settings.talkShortcutEnabled)
+                    Toggle("Hold \(GlobalHotKeys.talkLabel) to talk", isOn: $settings.talkShortcutEnabled)
                 }
                 Text("Listens only when you ask. Everything stays on your Mac.")
                     .font(.system(.caption2, design: .rounded))

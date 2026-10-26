@@ -90,4 +90,21 @@ import MochiCore
         expect(!u.talkEnabled && u.talkHoldEnabled && !u.talkShortcutEnabled)
         d.removePersistentDomain(forName: name)
     }
+    check("shortcut tap switches a held start to hands-free") {
+        var m = ConversationMachine()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        _ = m.handle(.holdStart(t0))
+        expect(m.held)
+        _ = m.handle(.handsFree(t0.addingTimeInterval(0.2)))
+        expect(!m.held, "tap should clear held")
+        // With nothing said, the first-turn window now ends the conversation.
+        _ = m.handle(.tick(t0.addingTimeInterval(0.2 + ConversationMachine.firstWindow + 0.1)))
+        expect(!m.isActive, "silent hands-free start should time out")
+    }
+    check("handsFree is ignored when not held") {
+        var m = ConversationMachine()
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        _ = m.handle(.toggle(t0))
+        expect(m.handle(.handsFree(t0)).isEmpty)
+    }
 }

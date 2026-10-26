@@ -78,6 +78,7 @@ public struct ConversationMachine: Sendable {
         case toggle(Date)          // shortcut: start, or end if already active
         case holdStart(Date)
         case holdEnd(Date)
+        case handsFree(Date)       // a quick tap of the shortcut: keep listening until a pause
         case speechStarted(Date)
         case finalTranscript(String, Date)
         case replyReady(Date)
@@ -125,6 +126,11 @@ public struct ConversationMachine: Sendable {
             guard held else { return [] }
             held = false
             return phase == .listening ? [.finishListening] : []
+        case .handsFree(let now):
+            guard held, phase == .listening else { return [] }
+            held = false
+            if !heard { since = now }
+            return []
         case .speechStarted:
             if phase == .listening { heard = true }
             return []

@@ -59,6 +59,40 @@ final class ConversationCoordinator {
         }
     }
 
+    /// When the shortcut went down, if that press started a conversation (for hold-to-talk).
+    private var shortcutDownAt: Date?
+    private var shortcutIsDown = false
+    /// Holding the shortcut at least this long makes letting go send the turn (like letting go of Mochi).
+    static let shortcutHoldThreshold: TimeInterval = 0.35
+
+    /// Shortcut pressed. Not chatting: start listening (hold to talk, or tap for hands-free).
+    /// Already chatting: end the conversation, as before.
+    private func shortcutDown() {
+        guard !shortcutIsDown else { return } // ignore key repeat
+        shortcutIsDown = true
+        guard settings.talkEnabled, settings.showMascot || isActive else { return }
+        if isActive {
+            shortcutDownAt = nil
+            send(.toggle(Date()))
+        } else {
+            shortcutDownAt = Date()
+            send(.holdStart(Date()))
+        }
+    }
+
+    /// Shortcut released: after a real hold, send what was said now; after a quick tap, keep
+    /// listening hands-free until a pause.
+    private func shortcutUp() {
+        shortcutIsDown = false
+        guard let down = shortcutDownAt else { return }
+        shortcutDownAt = nil
+        if Date().timeIntervalSince(down) >= Self.shortcutHoldThreshold {
+            send(.holdEnd(Date()))
+        } else {
+            send(.handsFree(Date()))
+        }
+    }
+
     /// The shortcut: start, or end if a conversation is active.
     func toggle() {
         guard settings.talkEnabled, settings.showMascot || isActive else { return }
@@ -85,7 +119,8 @@ final class ConversationCoordinator {
         }
         if on {
             GlobalHotKeys.shared.register(id: Self.talkKeyID, keyCode: GlobalHotKeys.talkKeyCode,
-                                          modifiers: GlobalHotKeys.talkModifiers) { [weak self] in self?.toggle() }
+                                          modifiers: GlobalHotKeys.talkModifiers,
+                                          onRelease: { [weak self] in self?.shortcutUp() }) { [weak self] in self?.shortcutDown() }
         } else {
             GlobalHotKeys.shared.unregister(id: Self.talkKeyID)
         }
