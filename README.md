@@ -5,7 +5,7 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
 ![Mochi's poses](docs/poses_light.png)
 
 ## Features
-- **Floating mascot.** It's always on top, draggable, and never steals focus. It shows on every Space and over fullscreen apps. Choose Tiny, Small, Medium or Large.
+- **Floating mascot.** It's always on top, draggable, and never steals focus. It shows on every Space and over fullscreen apps. Choose Mini, Tiny, Small, Medium or Large.
 - **Menu bar countdown** (`🌱 19:42`), with a popover for these controls:
   - Start, Pause / Resume, Take break now, Skip, Snooze, Reset and Stop
   - **−1 / +1 / +5 min** to adjust the time while the timer runs
@@ -35,6 +35,10 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
   - Personal kind words a few times a day, based only on counts (focus sessions, to-dos done), never your to-do names.
   - On other Macs (Intel, older macOS, or Apple Intelligence off) Mochi works the same, just without the AI parts.
 - **Talk to Mochi 🎧.** Hold **Option + M** (or hold Mochi itself), talk, and let go; Mochi answers in its bubble and listens for your reply, so you can go back and forth. A quick tap of Option + M listens hands-free until you pause. Speech is recognized on your Mac only and never saved.
+- **Your calendar 🗓️** (off until you turn it on in Settings ⚙︎ → Calendar). Mochi reads the Mac's Calendar app (Google Calendar works if it's added in System Settings → Internet Accounts), read-only:
+  - A morning summary ("You have 3 meetings today. First up: Standup at 10:00 🌱") and a heads-up before each meeting (30 minutes by default) plus "Starting now".
+  - Meetings show under each day in the week list, and Plan my day / Talk to Mochi know about them.
+  - Mochi stays quiet while a meeting is happening; breaks wait until it ends.
 - **Little extras** (Settings ⚙︎ → Mochi's little extras):
   - A greeting with the date whenever you come back to your Mac after 10+ minutes away ("Good morning! ☀️ It's Thursday, October 22.").
   - A good-night line once each evening (8 pm by default).
@@ -52,6 +56,8 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
 - Smart Mochi uses Apple's **on-device** AI. It only sees your to-dos, today's timer counts, the time and the name you set, plus what you type to it, and it forgets each conversation when the card closes.
 - Your to-dos live in one private file: `~/Library/Application Support/Mochi/todos.json` (readable only by your Mac account). Settings are in `~/Library/Preferences/com.anh.mochi.plist`.
 - Reminder notifications can hide the to-do text (Settings ⚙︎ → To-dos).
+- Calendar access is read-only and off by default. Events are kept in memory only, never saved or sent; the kind words only ever see a count of meetings.
+- Talk to Mochi uses on-device speech recognition only; audio and transcripts are never saved.
 
 ## Uninstall
 1. Quit Mochi from its menu bar item (**Quit Mochi**). If you turned on "Open Mochi at login", turn it off first.

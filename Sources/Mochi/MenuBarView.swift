@@ -11,6 +11,7 @@ struct MenuBarView: View {
     let engine: TimerEngine
     let settings: MochiSettings
     let todos: TodoStore
+    let calendar: CalendarSource?
     let onOpenTodos: () -> Void
     @State private var loginStatus = LaunchAtLogin.status
     @State private var loginError: String?
@@ -167,6 +168,8 @@ struct MenuBarView: View {
 
                 talkSection
 
+                calendarSection
+
                 Toggle("Start automatically when Mochi opens", isOn: $settings.autoStart)
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -264,6 +267,51 @@ struct MenuBarView: View {
             .padding(.top, 4)
         }
         .font(.system(.callout, design: .rounded))
+    }
+
+    @ViewBuilder private var calendarSection: some View {
+        @Bindable var settings = settings
+        DisclosureGroup("Calendar 🗓️") {
+            VStack(alignment: .leading, spacing: 6) {
+                // Turning this on is what asks macOS for access; it is never requested at launch.
+                Toggle("Show my calendar 🗓️", isOn: $settings.calendarEnabled)
+                if settings.calendarEnabled {
+                    Picker("Heads-up before meetings", selection: $settings.meetingLeadMinutes) {
+                        ForEach(MeetingPolicy.leadOptions, id: \.self) { Text("\($0) min").tag($0) }
+                    }
+                    calendarStatus
+                }
+                Text("Reads your Mac's Calendar app. Never changes it or sends anything.")
+                    .font(.system(.caption2, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .font(.system(.callout, design: .rounded))
+            .padding(.top, 4)
+        }
+        .font(.system(.callout, design: .rounded))
+    }
+
+    @ViewBuilder private var calendarStatus: some View {
+        switch calendar?.status ?? .off {
+        case .authorized:
+            let n = calendar?.activeEvents.count ?? 0
+            Text("Connected ✓ \(n) event\(n == 1 ? "" : "s") in the next 7 days")
+                .font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
+        case .notDetermined:
+            Text("Waiting for your OK in the macOS prompt…")
+                .font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
+        case .denied:
+            Text("Calendar access is off. Allow Mochi in System Settings, Privacy & Security, Calendars.")
+                .font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Open Calendar privacy settings") { NSWorkspace.shared.open(CalendarSource.privacyURL) }
+                .font(.system(.caption, design: .rounded))
+        case .off:
+            EmptyView()
+        }
     }
 
     @ViewBuilder private var talkSection: some View {

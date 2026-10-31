@@ -312,18 +312,25 @@ public struct TodoCardView: View {
     @ViewBuilder
     private var weekSections: some View {
         ForEach(week) { day in
-            let free = day.items.isEmpty && !day.isToday
+            let empty = day.items.isEmpty && day.events.isEmpty
+            let free = empty && !day.isToday
             DayHeading(date: day.date, isToday: day.isToday, free: free, flash: flashDate == day.date) {
                 setTarget(day.date, flash: true)
                 fieldFocused = true
             }
-            if day.isToday && day.items.isEmpty {
+            if day.isToday && empty {
                 Text("Nothing yet, add something sweet ✨")
                     .font(.mochi(13, .medium))
                     .foregroundStyle(Palette.text.opacity(0.55))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, 8 + DayColumns.indent).padding(.trailing, 8).padding(.vertical, 5)
             } else if !free {
+                // Calendar events first (read-only), then the to-dos, on the same left edge.
+                let upcoming = day.isToday ? day.events.first { !$0.isAllDay && $0.start > now }?.id : nil
+                ForEach(day.events) { ev in
+                    EventRow(event: ev, now: now, isToday: day.isToday, isNext: ev.id == upcoming)
+                        .padding(.leading, DayColumns.indent)
+                }
                 ForEach(day.items) { item in row(item).padding(.leading, DayColumns.indent) }
             }
         }
@@ -612,6 +619,70 @@ private struct NoticeStrip: View {
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.peach.opacity(0.4)))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Palette.peach.opacity(0.7), lineWidth: 1))
             .accessibilityLabel("Warning: \(text)")
+    }
+}
+
+// MARK: - Calendar events
+
+/// A read-only meeting from the Mac's Calendar app: a coloured bar where a to-do has its checkbox,
+/// the title, and a lavender time chip. Not tickable or deletable.
+private struct EventRow: View {
+    let event: CalendarEvent
+    let now: Date
+    let isToday: Bool
+    let isNext: Bool
+
+    private var ended: Bool { isToday && !event.isAllDay && event.end <= now }
+    private var happening: Bool { isToday && event.isHappening(at: now) }
+
+    private var barColor: Color {
+        guard let hex = event.colorHex?.trimmingCharacters(in: CharacterSet(charactersIn: "#")),
+              hex.count == 6, let v = UInt32(hex, radix: 16) else { return Palette.focusRing }
+        return Color(nsColor: Palette.rgb(v))
+    }
+
+    private var timeText: String {
+        if event.isAllDay { return "All day" }
+        let f = Date.FormatStyle(date: .omitted, time: .shortened)
+        return "\(event.start.formatted(f)) – \(event.end.formatted(f))"
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 9) {
+            RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                .fill(barColor)
+                .frame(width: 5, height: 22)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(event.title)
+                    .font(.mochi(15, .regular))
+                    .foregroundStyle(Palette.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                HStack(spacing: 5) {
+                    Chip(text: timeText, tint: Palette.focusRing, symbol: event.isAllDay ? nil : "calendar")
+                    if happening {
+                        Text("now")
+                            .font(.mochi(10, .bold))
+                            .foregroundStyle(Palette.text.opacity(0.8))
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Capsule().fill(Palette.blush.opacity(0.45)))
+                    }
+                }
+            }
+            .opacity(ended ? 0.45 : 1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isNext || happening ? Palette.focusRing.opacity(0.12) : .clear)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(event.isAllDay ? "Meeting, \(event.title), all day"
+                            : "Meeting, \(event.title), \(event.start.formatted(Date.FormatStyle(date: .omitted, time: .shortened))) to \(event.end.formatted(Date.FormatStyle(date: .omitted, time: .shortened)))"
+                            + (happening ? ", happening now" : ""))
     }
 }
 

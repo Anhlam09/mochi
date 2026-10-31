@@ -35,6 +35,8 @@ final class TodoCoordinator {
     /// The "unreadable list" notice is shown until the card has been opened and closed once.
     private var recoveryPending: Bool
     private var loopTask: Task<Void, Never>?
+    var calendar: CalendarSource?
+    var meetings: MeetingCoordinator?
 
     private static let memoryKey = "todoAgentMemory"
     static let loopEvery: Duration = .seconds(30)
@@ -120,9 +122,19 @@ final class TodoCoordinator {
         let now = Date()
         // Bubbles need Mochi on screen and someone in front of it; reminders still notify when away.
         let active = settings.showMascot && !Self.userAway
-        let nudge = agent.decide(now: now, items: store.items, phase: engine.phase, event: event,
+        // In a meeting only timed reminders speak; anything else waits (and isn't used up).
+        var trial = agent
+        var nudge = trial.decide(now: now, items: store.items, phase: engine.phase, event: event,
                                  userActive: active, settings: settings.todoAgent)
+        if calendar?.isInMeeting == true, let n = nudge, n.kind != .reminderSoon, n.kind != .reminderNow { return }
+        agent = trial
         saveMemory()
+        guard var shown = nudge else { return }
+        if shown.kind == .morning, let summary = meetings?.takeMorningSummary() {
+            let left = store.counts(now: now).left
+            shown.text = "Good morning! ☀️ \(summary) Plus \(left) to-do\(left == 1 ? "" : "s") today."
+        }
+        nudge = shown
         guard let nudge else { return }
         if nudge.showBubble {
             companion.sayTodo(Chatter.fill(nudge.text, name: settings.friendName), longer: nudge.openCard) { [weak self] in
@@ -163,7 +175,7 @@ final class TodoCoordinator {
                   showMoveToTomorrow: { [weak self] in self?.shouldOfferMoveToTomorrow ?? false },
                   notice: { [weak self] in self?.notice },
                   ask: { [weak self] in self?.askState },
-                  week: { [store] in store.week(now: Date()) },
+                  week: { [store, weak self] in store.week(now: Date(), events: self?.calendar?.activeEvents ?? []) },
                   actions: actions)
     }
 

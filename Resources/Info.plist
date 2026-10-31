@@ -22,6 +22,10 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Mochi reads your calendar on your Mac to remind you about meetings. It never changes your calendar or sends anything anywhere.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Mochi reads your calendar on your Mac to remind you about meetings. It never changes your calendar or sends anything anywhere.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Mochi listens only while you hold it or press the shortcut, and everything stays on your Mac.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

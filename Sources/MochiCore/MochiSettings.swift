@@ -46,6 +46,9 @@ public final class MochiSettings {
     public var mealIdeas: String { didSet { defaults.set(mealIdeas, forKey: "mealIdeas") } }
     /// Minutes between self-care nudges; 0 is off.
     public var selfCareMinutes: Int { didSet { defaults.set(selfCareMinutes, forKey: "selfCareMinutes") } }
+    // Calendar (read-only, via the Mac's Calendar app)
+    public var calendarEnabled: Bool { didSet { defaults.set(calendarEnabled, forKey: "calendarEnabled") } }
+    public var meetingLeadMinutes: Int { didSet { defaults.set(meetingLeadMinutes, forKey: "meetingLeadMinutes") } }
     // Talk to Mochi (on-device speech only)
     public var talkEnabled: Bool { didSet { defaults.set(talkEnabled, forKey: "talkEnabled") } }
     public var talkHoldEnabled: Bool { didSet { defaults.set(talkHoldEnabled, forKey: "talkHoldEnabled") } }
@@ -57,7 +60,7 @@ public final class MochiSettings {
 
     private static let installMarkers = ["presetID", "customFocusMinutes", "customBreakMinutes", "soundEnabled", "showMascot",
                                          "autoStart", "mascotSize", "calmMode", "chatLevel", "friendName", "flavor",
-                                         "flavorRotation", "wakeGreeting", "goodNight", "goodNightHour", "mealIdeas", "selfCareMinutes", "talkEnabled", "talkHoldEnabled", "talkShortcutEnabled", "todosEnabled", "todoNudges", "smartMochi", "positivity"]
+                                         "flavorRotation", "wakeGreeting", "goodNight", "goodNightHour", "mealIdeas", "selfCareMinutes", "calendarEnabled", "meetingLeadMinutes", "talkEnabled", "talkHoldEnabled", "talkShortcutEnabled", "todosEnabled", "todoNudges", "smartMochi", "positivity"]
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -68,6 +71,9 @@ public final class MochiSettings {
         mealIdeas = defaults.string(forKey: "mealIdeas").flatMap(MealMode.init(rawValue:))?.rawValue ?? MealMode.any.rawValue
         let care = defaults.object(forKey: "selfCareMinutes") as? Int ?? 60
         selfCareMinutes = SelfCare.options.contains(care) ? care : 60
+        calendarEnabled = defaults.object(forKey: "calendarEnabled") as? Bool ?? false
+        let lead = defaults.object(forKey: "meetingLeadMinutes") as? Int ?? MeetingPolicy.defaultLead
+        meetingLeadMinutes = MeetingPolicy.leadOptions.contains(lead) ? lead : MeetingPolicy.defaultLead
         talkEnabled = defaults.object(forKey: "talkEnabled") as? Bool ?? true
         talkHoldEnabled = defaults.object(forKey: "talkHoldEnabled") as? Bool ?? true
         talkShortcutEnabled = defaults.object(forKey: "talkShortcutEnabled") as? Bool ?? true

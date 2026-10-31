@@ -11,16 +11,19 @@ struct MascotHost: View {
     let todos: TodoStore
     let todoCoordinator: TodoCoordinator
     let conversation: ConversationCoordinator
+    let calendar: CalendarSource
 
     var body: some View {
         let todoLine = companion.todoLine
+        // The break tip waits while a meeting is on.
+        let tip = calendar.isInMeeting ? nil : Self.bubble(for: engine)
         let talk = conversation
         let basePose = Self.pose(for: engine, talking: todoLine != nil || companion.conversationText != nil
-                                 || (Self.bubble(for: engine) == nil && companion.message != nil))
+                                 || (tip == nil && companion.message != nil))
         MascotView(
             pose: talk.isThinking ? .thinking : talk.isListening ? .listening : basePose,
             progress: engine.progress,
-            bubbleText: companion.conversationText ?? todoLine ?? Self.bubble(for: engine) ?? companion.message,
+            bubbleText: companion.conversationText ?? todoLine ?? tip ?? companion.message,
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium,
             hoverText: Self.hoverText(for: engine),
             // Low Power Mode always gets the low-CPU animation.

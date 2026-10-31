@@ -115,6 +115,39 @@ func renderTodoPreviews(into dir: URL) {
             MascotView(pose: .thinking, progress: 0.3, bubbleText: nil, size: .tiny, calm: true)
         }, name: "mascot_voice_calm_\(mode)", dark: dark, dir: dir, pad: 8)
 
+        func ev(_ id: String, _ title: String, _ h1: Int, _ m1: Int, _ h2: Int, _ m2: Int, day: Date, hex: String? = nil, allDay: Bool = false) -> CalendarEvent {
+            CalendarEvent(id: id, title: title,
+                          start: cal.date(bySettingHour: h1, minute: m1, second: 0, of: day)!,
+                          end: cal.date(bySettingHour: h2, minute: m2, second: 0, of: day)!,
+                          isAllDay: allDay, colorHex: hex)
+        }
+        let nowH = cal.component(.hour, from: now)
+        let evWeek: [TodoWeekDay] = weekDays.enumerated().map { i, d in
+            var d = d
+            if i == 0 {
+                d.events = [
+                    ev("a", "Team offsite", 0, 0, 23, 59, day: d.date, hex: "#7FB5FF", allDay: true),
+                    ev("b", "Standup", max(0, nowH - 3), 0, max(0, nowH - 3), 30, day: d.date, hex: "#FF8FA3"),
+                    ev("c", "Design review with the whole product team", max(0, nowH - 1), 0, min(23, nowH + 1), 0, day: d.date, hex: "#7FD8A6"),
+                    ev("d", "Dinner with Mina", min(22, nowH + 3), 0, min(23, nowH + 4), 30, day: d.date),
+                ]
+            } else if i == 2 {
+                d.events = [ev("e", "Dentist", 9, 0, 10, 0, day: d.date, hex: "#FF8FA3"),
+                            ev("f", "Planning", 14, 0, 15, 30, day: d.date, hex: "#7FB5FF")]
+                d.items = []
+            }
+            return d
+        }
+        snapshot(TodoCardView(items: items, now: now, actions: actionsDay, showMoveToTomorrow: true, week: evWeek),
+                 name: "todo_week_events_\(mode)", dark: dark, dir: dir)
+        let evFuture = evWeek.enumerated().map { i, d -> TodoWeekDay in
+            var d = d
+            if i == 0 { d.events = []; d.items = [] }
+            return d
+        }
+        snapshot(TodoCardView(items: [], now: now, actions: actionsDay, showMoveToTomorrow: false, week: evFuture),
+                 name: "todo_week_events_future_\(mode)", dark: dark, dir: dir)
+
         let badges = HStack(spacing: 0) {
             ForEach([3, 12, 0], id: \.self) { n in
                 MascotView(pose: .idle, progress: 0.3, bubbleText: n == 12 ? "You have 12 to-dos 🌱" : nil,

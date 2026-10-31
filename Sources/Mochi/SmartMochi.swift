@@ -44,6 +44,8 @@ final class AgentContext {
     let engine: TimerEngine
     let settings: MochiSettings
     private(set) var stats = TimerStats()
+    /// Read-only calendar events (titles are data for Ask and Talk only; the counts snapshot never has them).
+    var calendar: CalendarSource?
 
     init(store: TodoStore, engine: TimerEngine, settings: MochiSettings) {
         self.store = store
@@ -55,12 +57,13 @@ final class AgentContext {
 
     /// Titles-free snapshot for the unprompted kind lines.
     func countsSnapshot(now: Date = Date()) -> String {
-        AgentSnapshot.makeCounts(now: now, name: settings.friendName, items: store.items, stats: stats)
+        AgentSnapshot.makeCounts(now: now, name: settings.friendName, items: store.items, stats: stats,
+                                 events: calendar?.activeEvents ?? [])
     }
 
     func snapshot(now: Date = Date()) -> String {
         AgentSnapshot.make(now: now, name: settings.friendName, items: store.items, phase: engine.phase,
-                           remaining: engine.remaining, stats: stats)
+                           remaining: engine.remaining, stats: stats, events: calendar?.activeEvents ?? [])
     }
 }
 
@@ -241,7 +244,7 @@ final class AskMochi {
         // "Plan my week" is answered from the week's counts in code: exact, instant, no model needed.
         let lower = text.lowercased()
         if lower.contains("plan") && lower.contains("week") {
-            state = AskMochiState(reply: AgentSnapshot.weekSummary(now: Date(), items: context.store.items),
+            state = AskMochiState(reply: AgentSnapshot.weekSummary(now: Date(), items: context.store.items, events: context.calendar?.activeEvents ?? []),
                                   isThinking: false, actionsTaken: [], unavailableReason: nil)
             return
         }

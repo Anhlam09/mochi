@@ -14,6 +14,8 @@ final class Nudger: NSObject, UNUserNotificationCenterDelegate {
     private let settings: MochiSettings
     private let center: UNUserNotificationCenter?
     private var playing: [NSSound] = []
+    /// Set after launch; used to hold the break notification while a meeting is on.
+    var calendar: CalendarSource?
 
     init(engine: TimerEngine, settings: MochiSettings) {
         self.engine = engine
@@ -32,6 +34,16 @@ final class Nudger: NSObject, UNUserNotificationCenterDelegate {
             UNNotificationCategory(identifier: "BREAK_DUE", actions: actions, intentIdentifiers: [], options: [])
         ])
         trackPhase()
+    }
+
+    /// A meeting heads-up when Mochi is hidden or you are away. Local only.
+    func postMeetingReminder(id: String, title: String, body: String) {
+        guard let center else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        center.add(UNNotificationRequest(identifier: "mochi.meeting." + id, content: content, trigger: nil)) { _ in }
+        play("Glass")
     }
 
     /// Asks for notification permission, once, and only if the user has never been asked
@@ -53,6 +65,17 @@ final class Nudger: NSObject, UNUserNotificationCenterDelegate {
     func handle(_ event: EngineEvent) {
         switch event {
         case .breakDue:
+            if let end = calendar?.currentMeetingEnd() {
+                // In a meeting: hold the notification until it ends (if the break is still due).
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(max(1, end.timeIntervalSinceNow + 1)))
+                    guard let self, case .breakDue = self.engine.phase else { return }
+                    self.post(id: Self.dueID, title: "Time for a little break 🌱",
+                              body: self.engine.currentTip ?? "Step away for a moment.", category: "BREAK_DUE")
+                    self.play("Glass")
+                }
+                return
+            }
             post(id: Self.dueID, title: "Time for a little break 🌱",
                  body: engine.currentTip ?? "Step away for a moment.", category: "BREAK_DUE")
             play("Glass")

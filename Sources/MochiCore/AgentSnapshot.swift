@@ -36,7 +36,8 @@ public enum AgentSnapshot {
     public static let maxNameLength = 30
 
     public static func make(now: Date, calendar: Calendar = .autoupdatingCurrent, name: String, items: [TodoItem],
-                            phase: Phase, remaining: TimeInterval, stats: TimerStats) -> String {
+                            phase: Phase, remaining: TimeInterval, stats: TimerStats,
+                            events: [CalendarEvent] = []) -> String {
         let hourMinute = clock(now, calendar)
         var lines: [String] = []
         lines.append("Now: \(weekday(now, calendar)) \(hourMinute), \(partName(DayPart(hour: calendar.component(.hour, from: now))))")
@@ -46,7 +47,7 @@ public enum AgentSnapshot {
         let s = stats.today(now: now, calendar: calendar)
         lines.append("Today so far: \(s.focus) focus session\(s.focus == 1 ? "" : "s") finished, \(s.breaks) break\(s.breaks == 1 ? "" : "s") taken")
 
-        let week = TodoList.week(items, now: now, calendar: calendar)
+        let week = TodoList.week(items, now: now, calendar: calendar, events: events)
         let later = TodoList.later(items, now: now, calendar: calendar)
         let today = week[0].items
         let open = week[0].openCount
@@ -66,6 +67,7 @@ public enum AgentSnapshot {
         }
         if today.isEmpty { lines.append("(none)") }
         today.forEach { row($0, label: nil) }
+        if !week[0].events.isEmpty { lines.append("Meetings today: \(MeetingPolicy.line(week[0].events, calendar: calendar))") }
         var total = today.count
         for day in week.dropFirst() {
             total += day.items.count
@@ -73,6 +75,7 @@ public enum AgentSnapshot {
             lines.append("\(longDayLabel(day.date, calendar)) (\(n == 0 ? "free" : n == 1 ? "1 open to-do" : "\(n) open to-dos")):")
             if day.items.isEmpty { lines.append("(nothing)") }
             day.items.forEach { row($0, label: nil) }
+            if !day.events.isEmpty { lines.append("Meetings: \(MeetingPolicy.line(day.events, calendar: calendar))") }
         }
         if !later.isEmpty {
             lines.append("Later:")
@@ -86,7 +89,7 @@ public enum AgentSnapshot {
     /// A titles-free snapshot for kind words: only the time, day part, name and counts. To-do titles
     /// never reach the model that writes unprompted lines.
     public static func makeCounts(now: Date, calendar: Calendar = .autoupdatingCurrent, name: String, items: [TodoItem],
-                                  stats: TimerStats) -> String {
+                                  stats: TimerStats, events: [CalendarEvent] = []) -> String {
         var lines = ["Now: \(weekday(now, calendar)) \(clock(now, calendar)), \(partName(DayPart(hour: calendar.component(.hour, from: now))))"]
         let cleanName = clip(name, maxNameLength)
         if !cleanName.isEmpty { lines.append("Friend's name: \(cleanName)") }
@@ -97,11 +100,13 @@ public enum AgentSnapshot {
         lines.append("To-dos done today: \(c.done)")
         lines.append("To-dos left today: \(c.left)")
         lines.append("All to-dos done: \(c.left == 0 && c.done > 0 ? "yes" : "no")")
+        let meetings = CalendarDays.meetings(events, on: now, calendar: calendar).count
+        if meetings > 0 { lines.append("Meetings today: \(meetings)") }   // a count only, never titles
         return lines.joined(separator: "\n")
     }
 
     /// One line, no control characters, at most `max` characters.
-    static func clip(_ s: String, _ max: Int) -> String {
+    public static func clip(_ s: String, _ max: Int) -> String {
         let flat = s.unicodeScalars.map { CharacterSet.controlCharacters.contains($0) || CharacterSet.newlines.contains($0) ? " " : String($0) }
             .joined().split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
         return flat.count <= max ? flat : String(flat.prefix(max - 1)) + "…"
@@ -124,21 +129,29 @@ public enum AgentSnapshot {
 
     /// A short, warm "plan my week" overview written entirely in code from the week's counts (the small
     /// on-device model kept misreading dates). No titles: just the busiest day and a day to rest.
-    public static func weekSummary(now: Date, calendar: Calendar = .autoupdatingCurrent, items: [TodoItem]) -> String {
-        let week = TodoList.week(items, now: now, calendar: calendar)
+    public static func weekSummary(now: Date, calendar: Calendar = .autoupdatingCurrent, items: [TodoItem],
+                                   events: [CalendarEvent] = []) -> String {
+        let week = TodoList.week(items, now: now, calendar: calendar, events: events)
+        func load(_ d: TodoWeekDay) -> Int { d.openCount + d.events.filter { !$0.isAllDay }.count }
         func name(_ d: Date) -> String {
             let f = DateFormatter()
             f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = calendar.timeZone
             f.dateFormat = "EEEE (MMM d)"
             return f.string(from: d)
         }
-        guard let busiest = week.max(by: { $0.openCount < $1.openCount }), busiest.openCount > 0 else {
+        guard let busiest = week.max(by: { load($0) < load($1) }), load(busiest) > 0 else {
             return "Your week is wide open! A lovely time to start something small, or simply rest 🌱"
         }
-        var parts = ["\(busiest.isToday ? "Today" : name(busiest.date)) is your busiest day with \(busiest.openCount) open to-do\(busiest.openCount == 1 ? "" : "s")."]
-        let rest = week.dropFirst().first { $0.openCount == 0 && $0.date != busiest.date } ?? week.first { $0.openCount == 0 && $0.date != busiest.date }
+        func describe(_ d: TodoWeekDay) -> String {
+            let m = d.events.filter { !$0.isAllDay }.count, t = d.openCount
+            let meetings = "\(m) meeting\(m == 1 ? "" : "s")"
+            if m == 0 { return "\(t) open to-do\(t == 1 ? "" : "s")" }
+            return t == 0 ? meetings : "\(meetings) and \(t) to-do\(t == 1 ? "" : "s")"
+        }
+        var parts = ["\(busiest.isToday ? "Today" : name(busiest.date)) is your busiest day with \(describe(busiest))."]
+        let rest = week.dropFirst().first { load($0) == 0 && $0.date != busiest.date } ?? week.first { load($0) == 0 && $0.date != busiest.date }
         if let rest { parts.append("\(rest.isToday ? "Today" : name(rest.date)) is free, a lovely day to rest.") }
-        let total = week.reduce(0) { $0 + $1.openCount }
+        let total = week.reduce(0) { $0 + load($1) }
         parts.append(total <= 3 ? "A gentle week, you've got this 🌱" : "One day at a time, you've got this 🌱")
         return parts.joined(separator: " ")
     }

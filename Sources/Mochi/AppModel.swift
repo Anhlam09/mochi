@@ -60,13 +60,29 @@ final class AppModel {
         todoCoordinator = coordinator
         eventHandlers.append { coordinator.handle($0) }
 
+        let calendarSource = CalendarSource(settings: settings)
+        self.calendar = calendarSource
+        context.calendar = calendarSource
+        nudger.calendar = calendarSource
+        companion.meetingQuiet = { [weak calendarSource] in calendarSource?.isInMeeting ?? false }
+        let meetings = MeetingCoordinator(calendar: calendarSource, settings: settings, companion: companion,
+                                          engine: engine, nudger: nudger)
+        meetings.openCard = { [weak coordinator] in coordinator?.openCard() }
+        companion.morningExtra = { [weak meetings] in meetings?.takeMorningSummary() }
+        coordinator.calendar = calendarSource
+        coordinator.meetings = meetings
+        calendarSource.start()
+        meetings.start()
+        self.meetings = meetings
+
         let conversation = ConversationCoordinator(settings: settings, companion: companion, context: context)
         conversation.start()
         self.conversation = conversation
 
         let panel = FloatingPanelController(
             rootView: MascotHost(engine: engine, settings: settings, companion: companion,
-                                 todos: todos, todoCoordinator: coordinator, conversation: conversation),
+                                 todos: todos, todoCoordinator: coordinator, conversation: conversation,
+                                 calendar: calendarSource),
             size: MascotSize(rawValue: settings.mascotSize) ?? .medium
         )
         self.panel = panel
@@ -89,6 +105,8 @@ final class AppModel {
     private var todoCoordinator: TodoCoordinator?
     private var welcome: WelcomeCoordinator?
     private var conversation: ConversationCoordinator?
+    private(set) var calendar: CalendarSource?
+    private var meetings: MeetingCoordinator?
     private var extras: ExtrasCoordinator?
     private var positivity: PositivityCoordinator?
 

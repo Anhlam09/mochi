@@ -80,7 +80,7 @@ final class Companion {
         if settings.wakeGreeting, settings.showMascot, settings.chat != .off, isQuiet,
            WakeGreeting.shouldGreet(awayFor: awayFor), !breakIsDue {
             defaults.set(now, forKey: Self.greetingKey)   // this counts as today's hello: no second greeting
-            show(WakeGreeting.line(now: now, name: settings.friendName))
+            show(greetingLine(now))
             return
         }
         if !greetIfNewDay(now) { say(.welcomeBack) }
@@ -133,7 +133,19 @@ final class Companion {
     }
 
     /// Nothing is being said right now (no chatter, no to-do line).
-    var isQuiet: Bool { message == nil && todoLine == nil && !conversationActive }
+    var isQuiet: Bool { message == nil && todoLine == nil && !conversationActive && !meetingQuiet() }
+
+    /// True while a calendar event is happening: Mochi stays quiet (set by the app).
+    var meetingQuiet: () -> Bool = { false }
+    /// Extra text for the morning greeting, e.g. the meeting summary (set by the app; once per day).
+    var morningExtra: (() -> String?)?
+
+    private func greetingLine(_ now: Date) -> String {
+        var line = WakeGreeting.line(now: now, name: settings.friendName)
+        let hour = Calendar.autoupdatingCurrent.component(.hour, from: now)
+        if (5..<12).contains(hour), let extra = morningExtra?() { line += " " + extra }
+        return line
+    }
 
     // MARK: Talk to Mochi
 
@@ -206,7 +218,7 @@ final class Companion {
     @ObservationIgnored private(set) var lastLineAt: Date?
 
     private func show(_ line: String) {
-        guard todoLine == nil, !conversationActive else { return }
+        guard todoLine == nil, !conversationActive, !meetingQuiet() else { return }
         let now = Date()
         lastLineAt = now
         message = line
@@ -267,7 +279,7 @@ final class Companion {
         if settings.wakeGreeting {
             // Same format as coming back to the Mac, so there is only ever one kind of greeting.
             chatter.name = settings.friendName
-            show(WakeGreeting.line(now: now, name: settings.friendName))
+            show(greetingLine(now))
         } else {
             say(.greeting)
         }

@@ -7,7 +7,7 @@ struct MochiApp: App {
     var body: some Scene {
         MenuBarExtra {
             MenuBarView(engine: model.engine, settings: model.settings, todos: model.todos,
-                        onOpenTodos: { model.openTodoCard() })
+                        calendar: model.calendar, onOpenTodos: { model.openTodoCard() })
         } label: {
             Text(Self.label(for: model.engine))
                 .monospacedDigit()

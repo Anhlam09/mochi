@@ -10,13 +10,16 @@ public struct TodoWeekDay: Sendable, Equatable, Identifiable {
     /// Unfinished to-dos on that day (drives the little dot in the strip).
     public var openCount: Int
     public var isToday: Bool
+    /// That day's calendar events (all-day first, then by start time). Empty when calendars are off.
+    public var events: [CalendarEvent]
 
     public var id: Date { date }
 
-    public init(date: Date, items: [TodoItem], openCount: Int, isToday: Bool) {
+    public init(date: Date, items: [TodoItem], openCount: Int, isToday: Bool, events: [CalendarEvent] = []) {
         self.date = date
         self.items = items
         self.openCount = openCount
         self.isToday = isToday
+        self.events = events
     }
 }

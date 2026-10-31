@@ -22,18 +22,20 @@ public enum TodoList {
 
     /// Seven days starting today. Today's items are the usual today list; other days show their open
     /// items (timed first, then by creation) followed by the ones finished.
-    public static func week(_ items: [TodoItem], now: Date, calendar: Calendar = .autoupdatingCurrent) -> [TodoWeekDay] {
+    public static func week(_ items: [TodoItem], now: Date, calendar: Calendar = .autoupdatingCurrent,
+                            events: [CalendarEvent] = []) -> [TodoWeekDay] {
         let start = calendar.startOfDay(for: now)
         return (0..<7).map { offset in
             let day = calendar.date(byAdding: .day, value: offset, to: start)!
+            let dayEvents = CalendarDays.events(events, on: day, calendar: calendar)
             if offset == 0 {
                 let list = today(items, now: now, calendar: calendar)
-                return TodoWeekDay(date: day, items: list, openCount: list.filter { !$0.done }.count, isToday: true)
+                return TodoWeekDay(date: day, items: list, openCount: list.filter { !$0.done }.count, isToday: true, events: dayEvents)
             }
             let mine = items.filter { calendar.isDate($0.day, inSameDayAs: day) }
             let open = mine.filter { !$0.done }.sorted(by: openOrder)
             let done = mine.filter(\.done).sorted { ($0.doneAt ?? $0.day) < ($1.doneAt ?? $1.day) }
-            return TodoWeekDay(date: day, items: open + done, openCount: open.count, isToday: false)
+            return TodoWeekDay(date: day, items: open + done, openCount: open.count, isToday: false, events: dayEvents)
         }
     }
 
@@ -107,7 +109,9 @@ public final class TodoStore {
     public func todayList(now: Date) -> [TodoItem] { TodoList.today(items, now: now, calendar: calendar) }
     public func counts(now: Date) -> (done: Int, left: Int) { TodoList.counts(items, now: now, calendar: calendar) }
     /// Today plus the next six days, ready for the card's day strip.
-    public func week(now: Date) -> [TodoWeekDay] { TodoList.week(items, now: now, calendar: calendar) }
+    public func week(now: Date, events: [CalendarEvent] = []) -> [TodoWeekDay] {
+        TodoList.week(items, now: now, calendar: calendar, events: events)
+    }
     /// Unfinished items beyond the week.
     public func laterList(now: Date) -> [TodoItem] { TodoList.later(items, now: now, calendar: calendar) }
 
