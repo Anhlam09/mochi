@@ -235,6 +235,21 @@ final class AskMochi {
                 return
             }
         }
+        // "Add …" / "can you add …" / "remind me to …": done in code with the user's own words, so it always
+        // works (the small model sometimes only talks about adding, or rewrites the text). No model needed.
+        if let request = AddRequest.parse(text) {
+            switch request {
+            case .needsWhat:
+                state = AskMochiState(reply: "What should I add? Try \"add buy milk\" or \"remind me to call Sam at 4\" 🌱")
+            case .add(let item):
+                tools.beginTurn(userText: text)
+                _ = tools.addTodo(item)
+                let actions = tools.actionsTaken
+                state = AskMochiState(reply: actions.isEmpty ? "Hmm, I couldn't add that one. Try again? 💜" : "Done! 🌱",
+                                      actionsTaken: actions)
+            }
+            return
+        }
         // Availability is checked on every ask (Apple Intelligence can be switched off meanwhile).
         if let reason = SmartMochi.unavailableReason() {
             session = nil
@@ -338,7 +353,10 @@ enum BrainSelfTest {
         let dir = given.deletingLastPathComponent()
         Task { @MainActor in
             if let reason = SmartMochi.unavailableReason() { out("SELFTEST unavailable: \(reason)"); exit(0) }
-            let cases: [Case] = [
+            // MOCHI_BRAIN_PROMPTS="a|b|c" runs just those requests (debugging what a user typed).
+            let custom = ProcessInfo.processInfo.environment["MOCHI_BRAIN_PROMPTS"]?
+                .split(separator: "|").map { String($0) } ?? []
+            let builtIn: [Case] = [
                 Case(prompt: "help me plan my afternoon", extra: []) { _, _, _ in },
                 Case(prompt: "remind me to call mom at 3", extra: []) { f, s, items in
                     if !s.actionsTaken.contains(where: { $0.contains("call mom") }) { f.append("no addTodo ran") }
@@ -375,6 +393,8 @@ enum BrainSelfTest {
                     if items.count != seed.count + 1 { f.append("junk to-do added") }
                 },
             ]
+            let cases = custom.isEmpty ? builtIn
+                : custom.map { p in Case(prompt: p, extra: []) { _, _, _ in } }
             let started = Date()
             for (n, c) in cases.enumerated() {
                 let file = dir.appendingPathComponent("case-\(n + 1).json")
