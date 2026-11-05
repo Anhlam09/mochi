@@ -16,7 +16,7 @@ final class CalendarSource {
     private(set) var events: [CalendarEvent] = []
     private(set) var status: CalendarStatus = .off
 
-    @ObservationIgnored private let store = EKEventStore()
+    @ObservationIgnored let store = EKEventStore()
     @ObservationIgnored private let settings: MochiSettings
     @ObservationIgnored private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     @ObservationIgnored private var loopTask: Task<Void, Never>?

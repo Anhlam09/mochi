@@ -39,6 +39,7 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
   - A morning summary ("You have 3 meetings today. First up: Standup at 10:00 🌱") and a heads-up before each meeting (30 minutes by default) plus "Starting now".
   - Meetings show under each day in the week list, and Plan my day / Talk to Mochi know about them.
   - Mochi stays quiet while a meeting is happening; breaks wait until it ends.
+  - **📅 Add to calendar:** hover a to-do and tap 📅 to add it to your calendar (Google Calendar if your Google account is connected in Internet Accounts). Mochi only ever adds a new event when you tap; it never edits or deletes your events.
 - **Little extras** (Settings ⚙︎ → Mochi's little extras):
   - A greeting with the date whenever you come back to your Mac after 10+ minutes away ("Good morning! ☀️ It's Thursday, October 22.").
   - A good-night line once each evening (8 pm by default).
@@ -56,7 +57,7 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
 - Smart Mochi uses Apple's **on-device** AI. It only sees your to-dos, today's timer counts, the time and the name you set, plus what you type to it, and it forgets each conversation when the card closes.
 - Your to-dos live in one private file: `~/Library/Application Support/Mochi/todos.json` (readable only by your Mac account). Settings are in `~/Library/Preferences/com.anh.mochi.plist`.
 - Reminder notifications can hide the to-do text (Settings ⚙︎ → To-dos).
-- Calendar access is read-only and off by default. Events are kept in memory only, never saved or sent; the kind words only ever see a count of meetings.
+- Calendar access is off by default. Mochi reads events, and only writes when you tap 📅 to add a to-do (it never edits or deletes events). Events are kept in memory only, never saved or sent; the kind words only ever see a count of meetings.
 - Talk to Mochi uses on-device speech recognition only; audio and transcripts are never saved.
 
 ## Uninstall

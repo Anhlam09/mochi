@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import Observation
@@ -36,6 +37,7 @@ final class TodoCoordinator {
     private var recoveryPending: Bool
     private var loopTask: Task<Void, Never>?
     var calendar: CalendarSource?
+    var writer: CalendarWriter?
     var meetings: MeetingCoordinator?
 
     private static let memoryKey = "todoAgentMemory"
@@ -176,6 +178,7 @@ final class TodoCoordinator {
                   notice: { [weak self] in self?.notice },
                   ask: { [weak self] in self?.askState },
                   week: { [store, weak self] in store.week(now: Date(), events: self?.calendar?.activeEvents ?? []) },
+                  canAddToCalendar: { [weak self] in self?.writer?.canAdd ?? false },
                   actions: actions)
     }
 
@@ -189,6 +192,43 @@ final class TodoCoordinator {
         recoveryPending = false
         askMochi?.cancel()
         askMochi = nil
+    }
+
+    /// The 📅 button: adds a NEW event for this to-do (only on tap). Calendars are switched on and access
+    /// requested first if needed; with nowhere writable Mochi says how to connect Google.
+    func addToCalendar(_ id: UUID) {
+        Task { @MainActor [weak self] in
+            guard let self, let calendar = self.calendar, let writer = self.writer,
+                  let item = self.store.items.first(where: { $0.id == id }) else { return }
+            if item.calendarEventID != nil { self.say("It's already on your calendar 📅"); return }
+            if !self.settings.calendarEnabled { self.settings.calendarEnabled = true }
+            await calendar.requestAccess()
+            guard calendar.status == .authorized else {
+                self.say("Calendar access is off. Allow Mochi in System Settings → Privacy & Security → Calendars 📅") {
+                    NSWorkspace.shared.open(CalendarSource.privacyURL)
+                }
+                return
+            }
+            guard writer.canAdd else {
+                self.say("To add to Google Calendar, connect Google in System Settings → Internet Accounts (Calendars on) 📅") {
+                    NSWorkspace.shared.open(CalendarWriter.internetAccountsURL)
+                }
+                return
+            }
+            do {
+                let eventID = try writer.add(item)
+                self.store.setCalendarEventID(id: id, eventID: eventID)
+                calendar.refresh()
+                self.say("Added to your calendar 📅")
+            } catch {
+                self.say("I couldn't add that to your calendar 💜")
+            }
+        }
+    }
+
+    private func say(_ text: String, onTap: @escaping () -> Void = {}) {
+        guard settings.showMascot else { return }
+        companion.sayTodo(text, longer: false, onTap: onTap)
     }
 
     /// The card's "start over" in Ask Mochi.
@@ -240,7 +280,8 @@ final class TodoCoordinator {
             close: { [weak self] in self?.cardClosed() },
             ask: { [weak self] in self?.askMochi?.ask($0) },
             addOnDay: { [weak self] text, day in self?.add(text, day: day) },
-            resetAsk: { [weak self] in self?.resetAsk() }
+            resetAsk: { [weak self] in self?.resetAsk() },
+            addToCalendar: { [weak self] in self?.addToCalendar($0) }
         )
     }
 }

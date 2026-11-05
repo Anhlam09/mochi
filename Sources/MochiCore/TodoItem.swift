@@ -11,9 +11,13 @@ public struct TodoItem: Codable, Identifiable, Sendable, Equatable {
     public var done: Bool
     public var doneAt: Date?
     public var createdAt: Date
+    /// Set when the user added this to-do to their calendar with the 📅 button (EventKit identifier).
+    /// Optional, so lists saved before this existed still load.
+    public var calendarEventID: String?
 
     public init(id: UUID = UUID(), title: String, day: Date, time: Date? = nil,
-                done: Bool = false, doneAt: Date? = nil, createdAt: Date = Date()) {
+                done: Bool = false, doneAt: Date? = nil, createdAt: Date = Date(),
+                calendarEventID: String? = nil) {
         self.id = id
         self.title = title
         self.day = day
@@ -21,6 +25,7 @@ public struct TodoItem: Codable, Identifiable, Sendable, Equatable {
         self.done = done
         self.doneAt = doneAt
         self.createdAt = createdAt
+        self.calendarEventID = calendarEventID
     }
 
     /// True when the to-do is unfinished and its day is before `today`'s day.

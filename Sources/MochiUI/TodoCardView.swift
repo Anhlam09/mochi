@@ -14,6 +14,8 @@ public struct TodoCardActions {
     public var addOnDay: (@MainActor (String, Date) -> Void)?
     /// Clears Mochi's reply so the Ask tab goes back to the suggestions ("← Back").
     public var resetAsk: (@MainActor () -> Void)?
+    /// Adds a to-do to the user's calendar (the 📅 button on a row).
+    public var addToCalendar: (@MainActor (UUID) -> Void)?
 
     public init(add: @escaping @MainActor (String) -> Void,
                 toggle: @escaping @MainActor (UUID) -> Void,
@@ -22,7 +24,9 @@ public struct TodoCardActions {
                 close: @escaping @MainActor () -> Void,
                 ask: (@MainActor (String) -> Void)? = nil,
                 addOnDay: (@MainActor (String, Date) -> Void)? = nil,
-                resetAsk: (@MainActor () -> Void)? = nil) {
+                resetAsk: (@MainActor () -> Void)? = nil,
+                addToCalendar: (@MainActor (UUID) -> Void)? = nil) {
+        self.addToCalendar = addToCalendar
         self.resetAsk = resetAsk
         self.ask = ask
         self.addOnDay = addOnDay
@@ -49,6 +53,8 @@ public struct TodoCardView: View {
     public var ask: AskMochiState?
     /// Today + the next 6 days; non-empty shows the day strip.
     public var week: [TodoWeekDay]
+    /// False when calendar access isn't connected: the 📅 button still shows, faded.
+    public var canAddToCalendar: Bool
     public var now: Date
     public var actions: TodoCardActions
     public var showMoveToTomorrow: Bool
@@ -70,7 +76,9 @@ public struct TodoCardView: View {
 
     public init(items: [TodoItem], later: [TodoItem] = [], now: Date, actions: TodoCardActions,
                 showMoveToTomorrow: Bool, notice: String? = nil, ask: AskMochiState? = nil, week: [TodoWeekDay] = [], laterExpanded: Bool = false,
-                initialTab: TodoCardTab? = nil, initialTarget: Date? = nil) {
+                initialTab: TodoCardTab? = nil, initialTarget: Date? = nil,
+                canAddToCalendar: Bool = false) {
+        self.canAddToCalendar = canAddToCalendar
         self._targetDate = State(initialValue: initialTarget)
         self.ask = ask
         self.week = week
@@ -302,7 +310,7 @@ public struct TodoCardView: View {
     // MARK: list
 
     private func row(_ item: TodoItem) -> some View {
-        TodoRow(item: item, now: now, actions: actions)
+        TodoRow(item: item, now: now, actions: actions, canAddToCalendar: canAddToCalendar)
             .transition(reduceMotion ? .opacity
                         : .asymmetric(insertion: .scale(scale: 0.92).combined(with: .opacity),
                                       removal: .opacity))
@@ -371,7 +379,7 @@ public struct TodoCardView: View {
             .accessibilityValue(laterOpen ? "expanded" : "collapsed")
             if laterOpen {
                 ForEach(later) { item in
-                    TodoRow(item: item, now: now, actions: actions, showDay: true)
+                    TodoRow(item: item, now: now, actions: actions, showDay: true, canAddToCalendar: canAddToCalendar)
                         .transition(.opacity)
                 }
             }
@@ -424,11 +432,13 @@ private struct TodoRow: View {
     let now: Date
     let actions: TodoCardActions
     var showDay = false
+    var canAddToCalendar = false
     @State private var hover = false
     @State private var dragX: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var carried: Bool { item.isCarriedOver(today: now) }
+    private var onCalendar: Bool { item.calendarEventID != nil }
     private static let swipeToDelete: CGFloat = -64
 
     var body: some View {
@@ -460,6 +470,13 @@ private struct TodoRow: View {
         .onHover { hover = $0 }
         .contextMenu {
             Button(item.done ? "Mark as not done" : "Mark as done") { actions.toggle(item.id) }
+            if let addToCalendar = actions.addToCalendar, !item.done {
+                if onCalendar {
+                    Button("Already on your calendar") {}.disabled(true)
+                } else {
+                    Button("Add to calendar 📅") { addToCalendar(item.id) }
+                }
+            }
             Button("Delete", role: .destructive) { actions.delete(item.id) }
         }
         .accessibilityElement(children: .ignore)
@@ -467,7 +484,10 @@ private struct TodoRow: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: item.done ? "Mark as not done" : "Mark as done") { actions.toggle(item.id) }
         .accessibilityAction(named: "Delete") { actions.delete(item.id) }
+        .accessibilityAction(named: calendarActionName) { if let a = actions.addToCalendar, !onCalendar, !item.done { a(item.id) } }
     }
+
+    private var calendarActionName: String { onCalendar ? "Already on your calendar" : "Add to calendar" }
 
     private var content: some View {
         HStack(alignment: .center, spacing: 9) {
@@ -479,7 +499,7 @@ private struct TodoRow: View {
                     .strikethrough(item.done, color: Palette.text.opacity(0.5))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                if item.time != nil || carried || showDay {
+                if item.time != nil || carried || showDay || onCalendar {
                     HStack(spacing: 5) {
                         if showDay {
                             Chip(text: dayText, tint: Palette.sprout, symbol: nil)
@@ -487,6 +507,9 @@ private struct TodoRow: View {
                         if let time = item.time {
                             Chip(text: time.formatted(date: .omitted, time: .shortened),
                                  tint: Palette.peach, symbol: "clock")
+                        }
+                        if onCalendar {
+                            Chip(text: "📅", tint: Palette.focusRing, symbol: nil)
                         }
                         if carried {
                             Chip(text: "from yesterday", tint: Palette.focusRing, symbol: nil)
@@ -497,17 +520,31 @@ private struct TodoRow: View {
             .opacity(item.done ? 0.45 : 1)
             Spacer(minLength: 0)
             if hover {
-                Button { actions.delete(item.id) } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Palette.text.opacity(0.5))
-                        .frame(width: 18, height: 18)
-                        .background(Circle().fill(Palette.softFill))
+                HStack(spacing: 4) {
+                    if let addToCalendar = actions.addToCalendar, !item.done, !onCalendar {
+                        Button { addToCalendar(item.id) } label: {
+                            Text("📅")
+                                .font(.system(size: 10))
+                                .frame(width: 18, height: 18)
+                                .background(Circle().fill(Palette.softFill))
+                                .opacity(canAddToCalendar ? 1 : 0.5)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHidden(true)
+                        .help(canAddToCalendar ? "Add to calendar" : "Connect your calendar to add this")
+                    }
+                    Button { actions.delete(item.id) } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Palette.text.opacity(0.5))
+                            .frame(width: 18, height: 18)
+                            .background(Circle().fill(Palette.softFill))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHidden(true)
+                    .help("Delete")
                 }
-                .buttonStyle(.plain)
                 .transition(.opacity)
-                .accessibilityHidden(true)
-                .help("Delete")
             }
         }
         .padding(.horizontal, 8)
@@ -533,6 +570,7 @@ private struct TodoRow: View {
         if showDay { parts.append("on " + item.day.formatted(.dateTime.weekday(.wide).month().day())) }
         if let time = item.time { parts.append("at " + time.formatted(date: .omitted, time: .shortened)) }
         if carried { parts.append("from yesterday") }
+        if onCalendar { parts.append("on your calendar") }
         parts.append(item.done ? "done" : "not done")
         return parts.joined(separator: ", ")
     }

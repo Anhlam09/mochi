@@ -148,6 +148,17 @@ func renderTodoPreviews(into dir: URL) {
         snapshot(TodoCardView(items: [], now: now, actions: actionsDay, showMoveToTomorrow: false, week: evFuture),
                  name: "todo_week_events_future_\(mode)", dark: dark, dir: dir)
 
+        let calItems = [
+            TodoItem(title: "Call mom", day: today, time: at3pm, calendarEventID: "evt-1"),
+            TodoItem(title: "Buy oat milk and strawberries", day: today),
+            TodoItem(title: "Reply to Mina's email", day: yesterday, calendarEventID: "evt-2"),
+            TodoItem(title: "Water the plants", day: today, done: true, doneAt: now),
+        ]
+        let actionsCal = TodoCardActions(add: { _ in }, toggle: { _ in }, delete: { _ in },
+                                         moveUnfinishedToTomorrow: {}, close: {}, addToCalendar: { _ in })
+        snapshot(TodoCardView(items: calItems, now: now, actions: actionsCal, showMoveToTomorrow: false, canAddToCalendar: true),
+                 name: "todo_card_calendar_\(mode)", dark: dark, dir: dir)
+
         let badges = HStack(spacing: 0) {
             ForEach([3, 12, 0], id: \.self) { n in
                 MascotView(pose: .idle, progress: 0.3, bubbleText: n == 12 ? "You have 12 to-dos 🌱" : nil,

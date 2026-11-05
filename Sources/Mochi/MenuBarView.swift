@@ -12,6 +12,7 @@ struct MenuBarView: View {
     let settings: MochiSettings
     let todos: TodoStore
     let calendar: CalendarSource?
+    let calendarWriter: CalendarWriter?
     let onOpenTodos: () -> Void
     @State private var loginStatus = LaunchAtLogin.status
     @State private var loginError: String?
@@ -280,6 +281,7 @@ struct MenuBarView: View {
                         ForEach(MeetingPolicy.leadOptions, id: \.self) { Text("\($0) min").tag($0) }
                     }
                     calendarStatus
+                    addTargetPicker
                 }
                 Text("Reads your Mac's Calendar app. Never changes it or sends anything.")
                     .font(.system(.caption2, design: .rounded))
@@ -292,6 +294,24 @@ struct MenuBarView: View {
             .padding(.top, 4)
         }
         .font(.system(.callout, design: .rounded))
+    }
+
+    /// Where the 📅 button on a to-do puts new events.
+    @ViewBuilder private var addTargetPicker: some View {
+        @Bindable var settings = settings
+        if calendar?.status == .authorized, let writer = calendarWriter {
+            let options = writer.writableCalendars
+            if options.isEmpty {
+                Text("No calendar to add to yet. To use Google Calendar, connect Google in System Settings → Internet Accounts.")
+                    .font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Picker("📅 Add to-dos to", selection: $settings.calendarAddTarget) {
+                    Text("Automatic").tag("")
+                    ForEach(options, id: \.id) { Text($0.pickerLabel).tag($0.id) }
+                }
+            }
+        }
     }
 
     @ViewBuilder private var calendarStatus: some View {

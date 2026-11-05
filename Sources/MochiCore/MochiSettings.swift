@@ -48,6 +48,8 @@ public final class MochiSettings {
     public var selfCareMinutes: Int { didSet { defaults.set(selfCareMinutes, forKey: "selfCareMinutes") } }
     // Calendar (read-only, via the Mac's Calendar app)
     public var calendarEnabled: Bool { didSet { defaults.set(calendarEnabled, forKey: "calendarEnabled") } }
+    /// Calendar identifier new events from the 📅 button go to; empty means automatic (Google first).
+    public var calendarAddTarget: String { didSet { defaults.set(calendarAddTarget, forKey: "calendarAddTarget") } }
     public var meetingLeadMinutes: Int { didSet { defaults.set(meetingLeadMinutes, forKey: "meetingLeadMinutes") } }
     // Talk to Mochi (on-device speech only)
     public var talkEnabled: Bool { didSet { defaults.set(talkEnabled, forKey: "talkEnabled") } }
@@ -72,6 +74,7 @@ public final class MochiSettings {
         let care = defaults.object(forKey: "selfCareMinutes") as? Int ?? 60
         selfCareMinutes = SelfCare.options.contains(care) ? care : 60
         calendarEnabled = defaults.object(forKey: "calendarEnabled") as? Bool ?? false
+        calendarAddTarget = defaults.string(forKey: "calendarAddTarget") ?? ""
         let lead = defaults.object(forKey: "meetingLeadMinutes") as? Int ?? MeetingPolicy.defaultLead
         meetingLeadMinutes = MeetingPolicy.leadOptions.contains(lead) ? lead : MeetingPolicy.defaultLead
         talkEnabled = defaults.object(forKey: "talkEnabled") as? Bool ?? true

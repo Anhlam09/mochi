@@ -70,6 +70,9 @@ final class AppModel {
         meetings.openCard = { [weak coordinator] in coordinator?.openCard() }
         companion.morningExtra = { [weak meetings] in meetings?.takeMorningSummary() }
         coordinator.calendar = calendarSource
+        let writer = CalendarWriter(source: calendarSource, settings: settings)
+        coordinator.writer = writer
+        self.calendarWriter = writer
         coordinator.meetings = meetings
         calendarSource.start()
         meetings.start()
@@ -107,6 +110,7 @@ final class AppModel {
     private var conversation: ConversationCoordinator?
     private(set) var calendar: CalendarSource?
     private var meetings: MeetingCoordinator?
+    private(set) var calendarWriter: CalendarWriter?
     private var extras: ExtrasCoordinator?
     private var positivity: PositivityCoordinator?
 

@@ -117,3 +117,90 @@ public enum MeetingPolicy {
         }.joined(separator: "; ")
     }
 }
+
+// MARK: Adding a to-do to the calendar (the user's explicit tap only)
+
+/// What the app knows about a calendar, simplified so the choice of target can be checked without EventKit.
+public struct CalendarDescriptor: Sendable, Equatable {
+    public enum SourceKind: Sendable, Equatable { case calDAV, local, exchange, subscribed, birthdays, other }
+    public var id: String
+    public var title: String
+    /// The account / source name, e.g. "Google" or "iCloud".
+    public var sourceTitle: String
+    public var sourceKind: SourceKind
+    public var allowsModifications: Bool
+    public var isSubscription: Bool
+
+    public init(id: String, title: String, sourceTitle: String, sourceKind: SourceKind,
+                allowsModifications: Bool, isSubscription: Bool = false) {
+        self.id = id; self.title = title; self.sourceTitle = sourceTitle; self.sourceKind = sourceKind
+        self.allowsModifications = allowsModifications; self.isSubscription = isSubscription
+    }
+
+    /// Writable, and not a subscription, birthdays or holidays calendar.
+    public var isWritable: Bool {
+        guard allowsModifications, !isSubscription, sourceKind != .subscribed, sourceKind != .birthdays else { return false }
+        let t = title.lowercased()
+        return !(t.contains("holiday") || t.contains("birthday"))
+    }
+
+    public var isGoogle: Bool {
+        let s = sourceTitle.lowercased()
+        return s.contains("google") || s.contains("gmail") && sourceKind == .calDAV
+            || sourceKind == .calDAV && s.contains("@gmail.")
+    }
+
+    /// "Work (Google)"
+    public var pickerLabel: String { sourceTitle.isEmpty || sourceTitle == title ? title : "\(title) (\(sourceTitle))" }
+}
+
+public enum CalendarTarget {
+    public static func writable(_ all: [CalendarDescriptor]) -> [CalendarDescriptor] { all.filter(\.isWritable) }
+
+    /// The user's pick (if still writable), else the first Google calendar, else the Mac's default for new
+    /// events if it is writable; nil when nothing can be written to.
+    public static func choose(from all: [CalendarDescriptor], defaultID: String?, preferredID: String?) -> String? {
+        let ok = writable(all)
+        if let preferredID, !preferredID.isEmpty, ok.contains(where: { $0.id == preferredID }) { return preferredID }
+        if let google = ok.first(where: \.isGoogle) { return google.id }
+        if let defaultID, ok.contains(where: { $0.id == defaultID }) { return defaultID }
+        return nil
+    }
+}
+
+/// The one event Mochi may create. Pure so it can be checked: no alarms, invitees or notes exist here.
+public struct CalendarEventSpec: Sendable, Equatable {
+    public var title: String
+    public var start: Date
+    public var end: Date
+    public var isAllDay: Bool
+
+    public static let duration: TimeInterval = 30 * 60
+
+    public init(title: String, start: Date, end: Date, isAllDay: Bool) {
+        self.title = title; self.start = start; self.end = end; self.isAllDay = isAllDay
+    }
+
+    /// A to-do with a time becomes a 30 minute event; one without becomes an all-day event on its day.
+    public static func make(for item: TodoItem, calendar: Calendar = .autoupdatingCurrent) -> CalendarEventSpec {
+        let title = String(item.title.prefix(TodoParser.maxTitleLength))
+        if let time = item.time {
+            return CalendarEventSpec(title: title, start: time, end: time.addingTimeInterval(duration), isAllDay: false)
+        }
+        let start = calendar.startOfDay(for: item.day)
+        let end = calendar.date(byAdding: .day, value: 1, to: start)!.addingTimeInterval(-1)
+        return CalendarEventSpec(title: title, start: start, end: end, isAllDay: true)
+    }
+}
+
+public enum CalendarDuplicates {
+    /// Drops events Mochi itself created from a to-do (matched by the to-do's saved event id on the same
+    /// day), so the week list shows the to-do's 📅 mark instead of the event twice.
+    public static func hide(_ events: [CalendarEvent], items: [TodoItem], calendar: Calendar = .autoupdatingCurrent) -> [CalendarEvent] {
+        let linked = items.compactMap { i in i.calendarEventID.map { (id: $0, day: i.day) } }
+        guard !linked.isEmpty else { return events }
+        return events.filter { e in
+            !linked.contains { e.id.hasPrefix($0.id + "@") && calendar.isDate(e.start, inSameDayAs: $0.day) }
+        }
+    }
+}

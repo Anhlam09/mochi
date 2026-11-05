@@ -25,9 +25,10 @@ public enum TodoList {
     public static func week(_ items: [TodoItem], now: Date, calendar: Calendar = .autoupdatingCurrent,
                             events: [CalendarEvent] = []) -> [TodoWeekDay] {
         let start = calendar.startOfDay(for: now)
+        let shown = CalendarDuplicates.hide(events, items: items, calendar: calendar)
         return (0..<7).map { offset in
             let day = calendar.date(byAdding: .day, value: offset, to: start)!
-            let dayEvents = CalendarDays.events(events, on: day, calendar: calendar)
+            let dayEvents = CalendarDays.events(shown, on: day, calendar: calendar)
             if offset == 0 {
                 let list = today(items, now: now, calendar: calendar)
                 return TodoWeekDay(date: day, items: list, openCount: list.filter { !$0.done }.count, isToday: true, events: dayEvents)
@@ -135,6 +136,13 @@ public final class TodoStore {
 
     public func delete(id: UUID) {
         items.removeAll { $0.id == id }
+        save()
+    }
+
+    /// Remembers that this to-do was added to the calendar (the EventKit identifier of the new event).
+    public func setCalendarEventID(id: UUID, eventID: String?) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        items[i].calendarEventID = eventID
         save()
     }
 

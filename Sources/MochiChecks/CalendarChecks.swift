@@ -122,11 +122,84 @@ import MochiCore
         expect(AgentSnapshot.weekSummary(now: at(14, 9), calendar: cal, items: [], events: []).hasPrefix("Your week is wide open"))
     }
 
+    check("calendar write: old lists without the field still decode, and the id persists") {
+        let old = #"{"version":1,"items":[{"id":"8D1C8B3E-0000-4000-8000-000000000001","title":"Old item","day":"2026-10-14T00:00:00Z","done":false,"createdAt":"2026-10-14T07:00:00Z"}]}"#
+        struct Envelope: Codable { var version: Int; var items: [TodoItem] }
+        let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601
+        let env = try d.decode(Envelope.self, from: Data(old.utf8))
+        expect(env.items.count == 1 && env.items[0].calendarEventID == nil && env.items[0].title == "Old item")
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mochi-cal-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("todos.json")
+        let s = TodoStore(fileURL: url, calendar: cal, now: at(14, 9))
+        let item = s.add("Dentist", now: at(14, 9))!
+        s.setCalendarEventID(id: item.id, eventID: "EVT-1")
+        expect(TodoStore(fileURL: url, calendar: cal, now: at(14, 9)).items.first?.calendarEventID == "EVT-1", "persisted")
+        s.setCalendarEventID(id: UUID(), eventID: "nope")
+        expect(s.items.count == 1)
+    }
+
+    check("calendar write: the new event is hidden from the week list (the to-do's mark is enough)") {
+        var added = TodoItem(title: "Dentist", day: cal.startOfDay(for: at(14, 0)), time: at(14, 10))
+        added.calendarEventID = "EVT-1"
+        let other = TodoItem(title: "Other", day: cal.startOfDay(for: at(14, 0)))
+        let mine = CalendarEvent(id: "EVT-1@123", title: "Dentist", start: at(14, 10), end: at(14, 10, 30), isAllDay: false)
+        let recurring = CalendarEvent(id: "EVT-1@999", title: "Dentist", start: at(21, 10), end: at(21, 10, 30), isAllDay: false)
+        let theirs = ev("Standup", 14, 9)
+        let shown = CalendarDuplicates.hide([mine, theirs, recurring], items: [added, other], calendar: cal)
+        expect(shown.map(\.title) == ["Standup", "Dentist"] && shown.last?.id == "EVT-1@999", "only the same day is hidden: \(shown.map(\.id))")
+        let week = TodoList.week([added, other], now: at(14, 9), calendar: cal, events: [mine, theirs])
+        expect(week[0].events.map(\.title) == ["Standup"], "week list: \(week[0].events.map(\.title))")
+        expect(week[0].items.contains { $0.calendarEventID == "EVT-1" })
+        expect(CalendarDuplicates.hide([mine], items: [other], calendar: cal) == [mine], "unlinked to-dos hide nothing")
+        let snapshot = AgentSnapshot.make(now: at(14, 8), calendar: cal, name: "", items: [added], phase: .idle, remaining: 0,
+                                          stats: TimerStats(), events: [mine, theirs])
+        expect(snapshot.contains("Standup") && !snapshot.contains("10:00–10:30 Dentist"), "no duplicate in Ask either")
+    }
+
+    check("calendar write: target selection (pick, Google first, default, never read-only)") {
+        func c(_ id: String, _ title: String, _ source: String, _ kind: CalendarDescriptor.SourceKind = .calDAV,
+               writable: Bool = true, sub: Bool = false) -> CalendarDescriptor {
+            CalendarDescriptor(id: id, title: title, sourceTitle: source, sourceKind: kind, allowsModifications: writable, isSubscription: sub)
+        }
+        let icloud = c("i", "Home", "iCloud"), google = c("g", "Work", "Google"), local = c("l", "On My Mac", "On My Mac", .local)
+        let readOnly = c("r", "School feed", "Subscribed", .subscribed, writable: false, sub: true)
+        let holidays = c("h", "US Holidays", "iCloud"), birthdays = c("b", "Birthdays", "Other", .birthdays)
+        let all = [readOnly, holidays, birthdays, icloud, google, local]
+        expect(CalendarTarget.choose(from: all, defaultID: "i", preferredID: nil) == "g", "Google first")
+        expect(CalendarTarget.choose(from: all, defaultID: "i", preferredID: "l") == "l", "the user's pick wins")
+        expect(CalendarTarget.choose(from: all, defaultID: "i", preferredID: "r") == "g", "a read-only pick is ignored")
+        expect(CalendarTarget.choose(from: [icloud, local], defaultID: "l", preferredID: "") == "l", "no Google: the default")
+        expect(CalendarTarget.choose(from: [icloud, local], defaultID: nil, preferredID: nil) == nil, "no Google, no default: nothing")
+        expect(CalendarTarget.choose(from: [readOnly, holidays, birthdays], defaultID: "r", preferredID: "b") == nil, "only read-only calendars: graceful nil")
+        expect(CalendarTarget.choose(from: [readOnly], defaultID: "r", preferredID: nil) == nil)
+        expect(CalendarTarget.choose(from: [], defaultID: nil, preferredID: nil) == nil)
+        expect(CalendarTarget.writable(all).map(\.id) == ["i", "g", "l"])
+        expect(!readOnly.isWritable && !holidays.isWritable && !birthdays.isWritable && icloud.isWritable)
+        expect(c("x", "Me", "me@gmail.com").isGoogle && c("y", "Me", "Gmail").isGoogle && !c("z", "Me", "iCloud").isGoogle)
+        expect(google.pickerLabel == "Work (Google)" && c("q", "Same", "Same").pickerLabel == "Same")
+    }
+
+    check("calendar write: the event to create (30 minutes with a time, all-day without)") {
+        let timed = TodoItem(title: "Go for a walkie", day: cal.startOfDay(for: at(14, 0)), time: at(14, 15))
+        let t = CalendarEventSpec.make(for: timed, calendar: cal)
+        expect(t == CalendarEventSpec(title: "Go for a walkie", start: at(14, 15), end: at(14, 15, 30), isAllDay: false), "\(t)")
+        let plain = TodoItem(title: "Buy milk", day: cal.startOfDay(for: at(16, 0)))
+        let a = CalendarEventSpec.make(for: plain, calendar: cal)
+        expect(a.isAllDay && a.start == at(16, 0) && a.end == at(17, 0).addingTimeInterval(-1) && a.title == "Buy milk", "\(a)")
+        let long = TodoItem(title: String(repeating: "x", count: 300), day: cal.startOfDay(for: at(14, 0)))
+        expect(CalendarEventSpec.make(for: long, calendar: cal).title.count == 120)
+        expect(CalendarEventSpec.duration == 1800)
+    }
+
     check("settings: calendar defaults (off, 30 minutes)") {
         let name = "mochi.checks.calendar.\(UUID().uuidString)"
         let d = UserDefaults(suiteName: name)!
         let s = MochiSettings(defaults: d)
-        expect(!s.calendarEnabled && s.meetingLeadMinutes == 30)
+        expect(!s.calendarEnabled && s.meetingLeadMinutes == 30 && s.calendarAddTarget == "")
+        s.calendarAddTarget = "ABC"
+        expect(MochiSettings(defaults: d).calendarAddTarget == "ABC")
+        s.calendarAddTarget = ""
         s.calendarEnabled = true; s.meetingLeadMinutes = 10
         let t = MochiSettings(defaults: d)
         expect(t.calendarEnabled && t.meetingLeadMinutes == 10)
