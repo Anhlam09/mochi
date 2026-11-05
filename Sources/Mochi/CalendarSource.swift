@@ -63,7 +63,12 @@ final class CalendarSource {
         } onChange: { [weak self] in
             Task { @MainActor in self?.trackEnabled(initial: false) }
         }
-        guard !initial else { return }
+        if initial {
+            // Turned on but never answered (e.g. the setting was on before the prompt could show):
+            // ask now. If the user already said yes or no, this does nothing.
+            if on, Self.rawStatus() == .notDetermined { Task { await requestAccess() } }
+            return
+        }
         if on {
             Task { await requestAccess() }
         } else {
