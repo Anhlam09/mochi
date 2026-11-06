@@ -26,7 +26,7 @@ import MochiCore
                     let lines = Chatter.lines(for: moment, part: part, weekday: weekday, month: month)
                     expect(!lines.isEmpty, "\(moment) \(part) \(weekday)")
                     for t in lines {
-                        let filled = Chatter.fill(t, name: "Christopher")
+                        let filled = Chatter.fill(t, name: "Sam")
                         expect(!filled.contains("{"), t)
                         expect(filled.count <= 64, "too long for the bubble: \(filled)")
                     }

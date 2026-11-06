@@ -4,6 +4,8 @@ A cute break-timer pet for macOS. A little mochi blob with a leaf sprout floats 
 
 ![Mochi's poses](docs/poses_light.png)
 
+**[⬇️ Download Mochi](https://anhlam09.github.io/mochi-site/)** (free, macOS 14 or newer, Apple Silicon and Intel).
+
 ## Features
 - **Floating mascot.** It's always on top, draggable, and never steals focus. It shows on every Space and over fullscreen apps. Choose Mini, Tiny, Small, Medium or Large.
 - **Menu bar countdown** (`🌱 19:42`), with a popover for these controls:
